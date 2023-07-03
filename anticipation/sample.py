@@ -88,7 +88,7 @@ def add_token(model, z, tokens, top_p, current_time, debug=False, past=None):
         for i in range(3):
             input_tokens = torch.tensor(z + history + new_token).unsqueeze(0).to(model.device)
             if past:
-                output = model(input_tokens, past_key_values=past)
+                output = model(input_tokens[:,-1:], past_key_values=past)
             else:
                 output = model(input_tokens)
         
