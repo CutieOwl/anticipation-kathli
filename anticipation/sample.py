@@ -78,8 +78,9 @@ def add_token(model, z, tokens, top_p, current_time, debug=False):
 
     history = tokens.copy()
     lookback = max(len(tokens) - 1017, 0)
-    history = history[lookback:] # Markov window
+    # history = history[lookback:] # Markov window
     offset = ops.min_time(history, seconds=False)
+    print("token context", len(tokens))
     history[::3] = [tok - offset for tok in history[::3]] # relativize time in the history buffer
 
     new_token = []
