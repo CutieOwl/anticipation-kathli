@@ -73,11 +73,13 @@ def instr_logits(logits, full_history):
     return logits
 
 
-def add_token(model, z, tokens, top_p, current_time, debug=False):
+def add_token(model, z, tokens, top_p, current_time, debug=False, past=None):
     assert len(tokens) % 3 == 0
 
     history = tokens.copy()
     lookback = max(len(tokens) - 1017, 0)
+    if(lookback > 0):
+        print("warning: lookback > 0")
     history = history[lookback:] # Markov window
     offset = ops.min_time(history, seconds=False)
     history[::3] = [tok - offset for tok in history[::3]] # relativize time in the history buffer
@@ -86,8 +88,12 @@ def add_token(model, z, tokens, top_p, current_time, debug=False):
     with torch.no_grad():
         for i in range(3):
             input_tokens = torch.tensor(z + history + new_token).unsqueeze(0).to(model.device)
-            logits = model(input_tokens).logits[0,-1]
-
+            if past:
+                output = model(input_tokens[:,-1:], past_key_values=past)
+            else:
+                output = model(input_tokens)
+        
+            logits = output.logits[0, -1]
             idx = input_tokens.shape[1]-1
             logits = safe_logits(logits, idx)
             if i == 0:
@@ -100,11 +106,13 @@ def add_token(model, z, tokens, top_p, current_time, debug=False):
             token = torch.multinomial(probs, 1)
             new_token.append(int(token))
 
+            past = output.past_key_values
+
     new_token[0] += offset # revert to full sequence timing
     if debug:
         print(f'  OFFSET = {offset}, LEN = {len(history)}, TIME = {tokens[::3][-5:]}')
 
-    return new_token
+    return new_token, past
 
 
 def generate(model, start_time, end_time, inputs=None, controls=None, top_p=1.0, debug=False, delta=DELTA*TIME_RESOLUTION):
@@ -148,6 +156,7 @@ def generate(model, start_time, end_time, inputs=None, controls=None, top_p=1.0,
     if debug:
         print('Current time:', current_time)
 
+    past_kv = None
     with tqdm(range(end_time-start_time)) as progress:
         if controls:
             atime, adur, anote = controls[0:3]
@@ -173,7 +182,7 @@ def generate(model, start_time, end_time, inputs=None, controls=None, top_p=1.0,
                     # nothing more to anticipate
                     anticipated_time = math.inf
 
-            new_token = add_token(model, z, tokens, top_p, max(start_time,current_time))
+            new_token, past_kv = add_token(model, z, tokens, top_p, max(start_time,current_time), past=past_kv)
             new_time = new_token[0] - TIME_OFFSET
             if new_time >= end_time:
                 break
