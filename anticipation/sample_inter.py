@@ -85,7 +85,10 @@ def add_token_inter(model, z, tokens, top_p, current_time, debug=False, past=Non
     assert len(tokens) % 3 == 0
 
     history = tokens.copy()
-    #history = history[-600:]
+    lookback = max(len(tokens) - 1017, 0)
+    #history = history[lookback:] # Markov window
+    #offset = ops.min_time(history, seconds=False)
+    #history[::3] = [tok - offset for tok in history[::3]] # relativize time in the history buffer
 
     new_token = []
     with torch.no_grad():
@@ -113,6 +116,7 @@ def add_token_inter(model, z, tokens, top_p, current_time, debug=False, past=Non
 
             past = output.past_key_values
 
+    #new_token[0] += offset # revert to full sequence timing
     return new_token, past
 
 
