@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from anticipation.config import *
 from anticipation.tokenize import tokenize, tokenize_ia
+from anticipation.tokenize_inter import tokenize_inter
 
 def main(args):
     encoding = 'interarrival' if args.interarrival else 'arrival'
@@ -32,7 +33,7 @@ def main(args):
 
     # parallel tokenization drops the last chunk of < M tokens
     # if concerned about waste: process larger groups of datafiles
-    func = tokenize_ia if args.interarrival else tokenize
+    func = tokenize_inter if args.interarrival else tokenize
     with Pool(processes=PREPROC_WORKERS, initargs=(RLock(),), initializer=tqdm.set_lock) as pool:
         results = pool.starmap(func, zip(files, outputs, augment, range(len(LAKH_SPLITS))))
 
@@ -40,7 +41,7 @@ def main(args):
             = (sum(x) for x in zip(*results))
     rest_ratio = round(100*float(rest_count)/(seq_count*M),2)
 
-    trunc_type = 'interarrival' if args.interarrival else 'duration'
+    trunc_type = 'duration'
     trunc_ratio = round(100*float(truncations)/(seq_count*M),2)
 
     print('Tokenization complete.')

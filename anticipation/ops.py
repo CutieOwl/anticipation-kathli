@@ -226,12 +226,8 @@ def max_time(tokens, seconds=True, instr=None):
         # stop calculating at sequence separator
         if note == SEPARATOR: break
 
-        if note < CONTROL_OFFSET:
-            time -= TIME_OFFSET
-            note -= NOTE_OFFSET
-        else:
-            time -= ATIME_OFFSET
-            note -= ANOTE_OFFSET
+        time -= TIME_OFFSET
+        note -= NOTE_OFFSET
 
         # max time of a particular instrument
         if instr is not None and instr != note//2**7:

@@ -25,9 +25,8 @@ if __name__ == '__main__':
             tokens = [int(token) for token in line.split()]
             if tokens[0] in [AUTOREGRESS, ANTICIPATE]:
                 tokens = tokens[1:] # strip control codes
-                mid = events_to_midi(tokens)
-            else: # it's the interarrival tokenization
-                mid = interarrival_to_midi(tokens)
+            
+            mid = events_to_midi(tokens, debug=True)
 
             mid.save(f'output/{Path(args.filename).stem}{i}.mid')
             print(f'{i} Tokenized MIDI Length: {mid.length} seconds ({len(tokens)} tokens)')

@@ -135,24 +135,6 @@ def tokenize_ia(datafiles, output, augment_factor, idx=0, debug=False):
     return (seqcount, rest_count, stats[0], stats[1], stats[2], stats[3], all_truncations)
 
 
-
-def find_element_index(arr, element):
-    indices = np.where(arr == element)[0]
-    if indices.size > 0:
-        return indices[0]  # Return the first occurrence of the element
-    else:
-        return -1 # Return -1 if element does not exist in arr
-
-
-def set_time_diffs(control_tokens, begin, sep):
-    time_tokens = control_tokens[begin:sep:3]
-    if len(time_tokens) >= 2:
-        diffs = time_tokens[1:] - time_tokens[:-1]
-        time_tokens[1:] = diffs
-    if len(time_tokens) >= 1:
-        control_tokens[begin:sep:3] = time_tokens
-
-
 def tokenize_inter(datafiles, output, augment_factor, idx=0, debug=False):
     tokens = []
     all_truncations = 0
@@ -173,66 +155,57 @@ def tokenize_inter(datafiles, output, augment_factor, idx=0, debug=False):
             instruments = list(ops.get_instruments(all_events).keys())
             end_time = ops.max_time(all_events, seconds=False)
 
-            # different random augmentations
-            for k in range(augment_factor):
-                if k % 10 == 0:
-                    # no augmentation
-                    events = all_events.copy()
-                    controls = []
-                elif k % 10 == 1:
-                    # span augmentation
-                    lmbda = .05
-                    events, controls = extract_spans(all_events, lmbda)
-                elif k % 10 < 6:
-                    # random augmentation
-                    r = np.random.randint(1,ANTICIPATION_RATES)
-                    events, controls = extract_random(all_events, r)
-                else:
-                    if len(instruments) > 1:
-                        # instrument augmentation: at least one, but not all instruments
-                        u = 1+np.random.randint(len(instruments)-1)
-                        subset = np.random.choice(instruments, u, replace=False)
-                        events, controls = extract_instruments(all_events, subset)
-                    else:
-                        # no augmentation
-                        events = all_events.copy()
-                        controls = []
+            events = all_events.copy()
+            #with open(f'/sailhome/kathli/repos/anticipation-kathli/output/arrival-{j}.txt', 'w') as f:
+            #    f.write(' '.join([str(tok) for tok in events]))
+            #print(filename)
+            controls = []
 
-                if len(concatenated_tokens) == 0:
-                    z = ANTICIPATE if k % 10 != 0 else AUTOREGRESS
+            if len(concatenated_tokens) == 0:
+                z = AUTOREGRESS
 
-                all_truncations += truncations
-                events = ops.pad(events, end_time)
-                rest_count += sum(1 if tok == REST else 0 for tok in events[2::3])
-                tokens, controls = ops.anticipate(events, controls)
-                assert len(controls) == 0 # should have consumed all controls (because of padding)
-                tokens[0:0] = [SEPARATOR, SEPARATOR, SEPARATOR]
-                concatenated_tokens.extend(tokens)
+            all_truncations += truncations
+            events = ops.pad(events, end_time)
+            rest_count += sum(1 if tok == REST else 0 for tok in events[2::3])
+            tokens = events
+            assert len(controls) == 0 # should have consumed all controls (because of padding)
 
-                # write out full sequences to file
-                while len(concatenated_tokens) >= EVENT_SIZE*M:
-                    seq = concatenated_tokens[0:EVENT_SIZE*M]
-                    concatenated_tokens = concatenated_tokens[EVENT_SIZE*M:]
+            # convert tokens to interarrival
+            #print("mid of length", len(tokens), "tokens")
+            tokens = np.array(tokens)
+            time_tokens = tokens[0::3]
+            if len(time_tokens) >= 2:
+                diffs = time_tokens[1:] - time_tokens[:-1]
+                time_tokens[1:] = diffs
+                tokens[0::3] = time_tokens
 
-                    begin = 0
-                    sep = find_element_index(seq[begin:], SEPARATOR)
-                    while sep != -1:
-                        sep += begin
-                        set_time_diffs(control_tokens, begin, sep)
-                        begin = sep + 3
-                        sep = find_element_index(control_tokens[begin:], SEPARATOR)
-                    # last section after SEP
-                    sep = len(control_tokens)
-                    set_time_diffs(control_tokens, begin, sep)
+            tokens = tokens.tolist()
+            
+            # make sure we did not somehow end up with negative time
+            assert ops.min_time(tokens, seconds=False) >= 0
 
-                    # if seq contains SEPARATOR, global controls describe the first sequence
-                    seq.insert(0, z)
+            tokens[0:0] = [SEPARATOR, SEPARATOR, SEPARATOR]
+            concatenated_tokens.extend(tokens)
+            
+            #with open(f'/sailhome/kathli/repos/anticipation-kathli/output/processed-{j}.txt', 'w') as f:
+            #    f.write(' '.join([str(tok) for tok in tokens]))
 
-                    outfile.write(' '.join([str(tok) for tok in seq]) + '\n')
-                    seqcount += 1
+            # write out full sequences to file
+            while len(concatenated_tokens) >= EVENT_SIZE*M:
+                seq = concatenated_tokens[0:EVENT_SIZE*M]
+                concatenated_tokens = concatenated_tokens[EVENT_SIZE*M:]
+                
+                # if seq contains SEPARATOR, global controls describe the first sequence
+                seq.insert(0, z)
 
-                    # grab the current augmentation controls if we didn't already
-                    z = ANTICIPATE if k % 10 != 0 else AUTOREGRESS
+                indices = [index for index, value in enumerate(seq) if value == SEPARATOR]
+                #print(indices)
+
+                outfile.write(' '.join([str(tok) for tok in seq]) + '\n')
+                seqcount += 1
+
+                # grab the current augmentation controls if we didn't already
+                z = AUTOREGRESS
 
     if debug:
         fmt = 'Processed {} sequences (discarded {} tracks, discarded {} seqs, added {} rest tokens)'
