@@ -21,14 +21,20 @@ pip install torch==2.0.1
 pip install tqdm==4.65.0
 pip install huggingface-hub==0.15.1
 
+ANT_ROOT=$(dirname "$(readlink -f $0)")/..
+
 echo $VENV > anticipation-kathli/infra/venv_path.txt
 
 cd anticipation-kathli
 
 pip install -e .
 
-umask 000
+cd $ANT_ROOT
 
-ANT_ROOT=$(dirname "$(readlink -f $0)")/..
+cd transformers-levanter
+
+pip install -e .
+
+umask 000
 
 PYTHONPATH=${ANT_ROOT}:${ANT_ROOT}/scripts:${ANT_ROOT}/tests:$PYTHONPATH "$@"
