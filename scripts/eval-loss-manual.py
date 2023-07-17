@@ -6,10 +6,12 @@ from math import exp
 import torch
 import torch.nn.functional as F
 
+import numpy as np
+
 import json
 
 import sys
-sys.path.append('/afs/cs.stanford.edu/u/kathli/repos/transformers-levanter/src')
+sys.path.append('/home/kml11/transformers-levanter/src')
 
 from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 
@@ -22,7 +24,8 @@ from anticipation.vocab import MIDI_TIME_OFFSET, MIDI_START_OFFSET, TIME_RESOLUT
 from anticipation.ops import max_time
 
 #DATA = "/nlp/scr/jthickstun/anticipation/datasets/arrival/train.txt"
-DATA = "/nlp/scr/kathli/datasets/lakh-data-inter/test.txt"
+DATA = "/home/kml11/lakh-data-inter-16384/test.txt"
+#DATA = "/nlp/scr/kathli/datasets/lakh-data-inter/test.txt" #
 #DATA = "/nlp/scr/jthickstun/anticipation/datasets/interarrival/test.txt"
 
 #DATA = "/nlp/scr/jthickstun/anticipation/datasets/arrival/maestro-test.txt"
@@ -33,7 +36,8 @@ DATA = "/nlp/scr/kathli/datasets/lakh-data-inter/test.txt"
 #CHECKPOINT= "/nlp/scr/jthickstun/anticipation/checkpoints/amber-yogurt-821/step-100000/hf"
 #CHECKPOINT= "/nlp/scr/kathli/checkpoints/exalted-grass-86/step-10000/hf"
 #CHECKPOINT = "/nlp/scr/jthickstun/anticipation/checkpoints/efficient-sun-259/step-100000/hf"
-CHECKPOINT= "/nlp/scr/kathli/checkpoints/rare-cherry-24/step-100000/hf"
+CHECKPOINT = "/home/kml11/driven-plant-48/hf"
+#CHECKPOINT= "/nlp/scr/kathli/checkpoints/rare-cherry-24/step-100000/hf" #
 #CHECKPOINT= "/nlp/scr/kathli/checkpoints/olive-universe-204/step-60000/hf"
 #CHECKPOINT= "/afs/cs.stanford.edu/u/kathli/repos/levanter-midi/checkpoints/upbeat-deluge-127/step-10000/hf"
 #CHECKPOINT= "/nlp/scr/jthickstun/anticipation/checkpoints/dashing-salad-267/step-100000/hf"
@@ -44,7 +48,7 @@ SUBSAMPLE=100
 t0 = time.time()
 
 config = json.load(open(f"{CHECKPOINT}/config.json"))
-config["n_positions"] = 1024
+config["n_positions"] = 16384
 config = GPT2Config.from_dict(config)
 model = GPT2LMHeadModel.from_pretrained(CHECKPOINT, config=config).cuda() #
 print(f'Loaded model ({time.time()-t0} seconds)')
@@ -62,11 +66,12 @@ if __name__ == '__main__':
     print(f'Calculating log-loss for {args.filename}')
     print(f'Using model {CHECKPOINT}')
     print(f'Sub-sampling results at rate {SUBSAMPLE}')
+    num_samples = 0
     with open(args.filename, 'r') as f:
         ce = torch.empty(0)
         for i,line in tqdm(list(enumerate(f))):
+            num_samples += 1
             if i % SUBSAMPLE != 0: continue
-
             tokens = [int(token) for token in line.split()]
             #print(tokens)
             tokens = torch.tensor(tokens).unsqueeze(0).cuda()
@@ -80,11 +85,15 @@ if __name__ == '__main__':
                cross_entr = F.cross_entropy(logits[:-1],tokens[0,1:],reduction='none')
                ce = torch.cat([ce, cross_entr.cpu()])
 
+        print('ce shape', ce.shape)
+        print('num samples', num_samples)
+        print(num_samples * 16383) # 1023 
         L = ce.mean()
         print('Tokens processed:', len(ce))
         print('Log-losses')
         print('  -> per-token log-loss (nats): ', L)
-        print('  -> bits per second: ', L*1.442695*(125050497 / (560.98*3600)))
+        print('  -> bits per second: ', L*np.log2(np.e)*(num_samples * 16383 / (560.98*3600)))
+        #print('  -> bits per second: ', L*1.442695*(125050497 / (560.98*3600)))
         if not args.interarrival:
             print('  -> per-event perplexity: ', exp(EVENT_SIZE*ce.mean()))
             print('  -> onset perplexity: ', exp(ce[0::3].mean()))
