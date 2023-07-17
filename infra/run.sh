@@ -17,7 +17,7 @@ pip install matplotlib==3.7.1
 pip install midi2audio==0.1.1
 pip install mido==1.2.10
 pip install numpy==1.22.4
-pip install torch==2.0.1+cu118
+pip install torch==2.0.1
 pip install tqdm==4.65.0
 
 echo $VENV > anticipation-kathli/infra/venv_path.txt
