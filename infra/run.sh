@@ -25,13 +25,11 @@ ANT_ROOT=$(dirname "$(readlink -f $0)")/..
 
 echo $VENV > anticipation-kathli/infra/venv_path.txt
 
-cd anticipation-kathli
-
+cd transformers-levanter
 pip install -e .
 
 cd $ANT_ROOT
-
-cd transformers-levanter
+cd anticipation-kathli
 
 pip install -e .
 
