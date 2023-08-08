@@ -78,7 +78,7 @@ def maybe_tokenize(compound_tokens):
         return None, None, 1 # short track
 
     events, truncations = compound_to_events(compound_tokens, stats=True)
-    end_time = ops.max_time(events, seconds=False)
+    end_time = ops.max_time_arr(events, seconds=False)
 
     # don't want to deal with extremely short tracks
     if end_time < TIME_RESOLUTION*MIN_TRACK_TIME_IN_SECONDS:
@@ -153,7 +153,7 @@ def tokenize(datafiles, output, augment_factor, idx=0, debug=False):
                 continue
 
             instruments = list(ops.get_instruments(all_events).keys())
-            end_time = ops.max_time(all_events, seconds=False)
+            end_time = ops.max_time_arr(all_events, seconds=False)
 
             # different random augmentations
             for k in range(augment_factor):

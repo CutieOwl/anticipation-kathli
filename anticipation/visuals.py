@@ -11,7 +11,7 @@ import anticipation.ops as ops
 from anticipation.config import *
 from anticipation.vocab import *
 
-def visualize(tokens, output, selected=None):
+def visualize(tokens, output, selected=None, length=120):
     #colors = ['white', 'silver', 'red', 'sienna', 'darkorange', 'gold', 'yellow', 'palegreen', 'seagreen', 'cyan',
     #          'dodgerblue', 'slategray', 'navy', 'mediumpurple', 'mediumorchid', 'magenta', 'lightpink']
     colors = ['white', '#426aa0', '#b26789', '#de9283', '#eac29f', 'silver', 'red', 'sienna', 'darkorange', 'gold', 'yellow', 'palegreen', 'seagreen', 'cyan', 'dodgerblue', 'slategray', 'navy']
@@ -19,12 +19,15 @@ def visualize(tokens, output, selected=None):
     plt.rcParams['figure.dpi'] = 300
     plt.rcParams['savefig.dpi'] = 300
  
-    max_time = ops.max_time(tokens, seconds=False)
+    max_time = length * TIME_RESOLUTION #ops.max_time(tokens, seconds=False)
     grid = np.zeros([max_time, MAX_PITCH])
     instruments = list(sorted(list(ops.get_instruments(tokens).keys())))
     if 128 in instruments:
         instruments.remove(128)
- 
+
+    print_time = 1000
+
+    cur_time = 0
     for j, (tm, dur, note) in enumerate(zip(tokens[0::3],tokens[1::3],tokens[2::3])):
         if note == SEPARATOR:
             assert tm == SEPARATOR and dur == SEPARATOR
@@ -36,7 +39,8 @@ def visualize(tokens, output, selected=None):
 
         assert note < CONTROL_OFFSET
 
-        tm = tm - TIME_OFFSET
+        cur_time += tm
+        tm = cur_time - TIME_OFFSET
         dur = dur - DUR_OFFSET
         note = note - NOTE_OFFSET
         instr = note//2**7
@@ -48,7 +52,20 @@ def visualize(tokens, output, selected=None):
         if selected and instr not in selected:
             continue
 
+        if cur_time > print_time:
+            print_time += 1000
+            print("passed time", cur_time, "at event", j, "token", j * 3)
+
+        if tm+dur > max_time:
+            print('time has exceeded max_time', tm+dur, max_time)
+            print('exceeded at event', j)
+            break
         grid[tm:tm+dur, pitch] = 1+instruments.index(instr)
+        #if cur_time > max_time:
+        #    print('time has exceeded max_time', cur_time, max_time)
+        #    break
+
+    print('cur_time', cur_time)
 
     plt.clf()
     plt.axis('off')

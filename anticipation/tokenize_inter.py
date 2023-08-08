@@ -204,8 +204,84 @@ def tokenize_inter(datafiles, output, augment_factor, idx=0, debug=False):
                 outfile.write(' '.join([str(tok) for tok in seq]) + '\n')
                 seqcount += 1
 
+                if '-f' in output and seqcount < 20:
+                    print("seq #", seqcount, "in file", output, "is filename", filename)
+
                 # grab the current augmentation controls if we didn't already
                 z = AUTOREGRESS
+
+    if debug:
+        fmt = 'Processed {} sequences (discarded {} tracks, discarded {} seqs, added {} rest tokens)'
+        print(fmt.format(seqcount, stats[0]+stats[1]+stats[2], stats[3], rest_count))
+
+    return (seqcount, rest_count, stats[0], stats[1], stats[2], stats[3], all_truncations)
+
+
+def tokenize_single_inter(datafile, output_file, augment_factor, idx=0, debug=False):
+    tokens = []
+    all_truncations = 0
+    seqcount = rest_count = 0
+    stats = 4*[0] # (short, long, too many instruments, inexpressible)
+    np.random.seed(0)
+
+    with open(output_file, 'w') as outfile:
+        concatenated_tokens = []
+
+        with open(datafile, 'r') as f:
+            all_events, truncations, status = maybe_tokenize([int(token) for token in f.read().split()])
+
+        if status > 0:
+            stats[status-1] += 1
+            print("FAILED TO TOKENIZE WITH STATUS", status)
+            return (seqcount, rest_count, stats[0], stats[1], stats[2], stats[3], all_truncations)
+
+        instruments = list(ops.get_instruments(all_events).keys())
+        end_time = ops.max_time(all_events, seconds=False)
+
+        events = all_events.copy()
+        controls = []
+
+        if len(concatenated_tokens) == 0:
+            z = AUTOREGRESS
+
+        all_truncations += truncations
+        events = ops.pad(events, end_time)
+        rest_count += sum(1 if tok == REST else 0 for tok in events[2::3])
+        tokens = events
+        assert len(controls) == 0 # should have consumed all controls (because of padding)
+
+        # convert tokens to interarrival
+        #print("mid of length", len(tokens), "tokens")
+        tokens = np.array(tokens)
+        time_tokens = tokens[0::3]
+        if len(time_tokens) >= 2:
+            diffs = time_tokens[1:] - time_tokens[:-1]
+            time_tokens[1:] = diffs
+            tokens[0::3] = time_tokens
+
+        tokens = tokens.tolist()
+        
+        # make sure we did not somehow end up with negative time
+        assert ops.min_time(tokens, seconds=False) >= 0
+
+        tokens[0:0] = [SEPARATOR, SEPARATOR, SEPARATOR]
+        concatenated_tokens.extend(tokens)
+
+        # write out the first sequence to file (doesn't use the rest of the file)
+        seq = concatenated_tokens[0:EVENT_SIZE*M]
+        concatenated_tokens = concatenated_tokens[EVENT_SIZE*M:]
+        
+        # if seq contains SEPARATOR, global controls describe the first sequence
+        seq.insert(0, z)
+
+        indices = [index for index, value in enumerate(seq) if value == SEPARATOR]
+        #print(indices)
+
+        outfile.write(' '.join([str(tok) for tok in seq]) + '\n')
+        seqcount += 1
+
+        # grab the current augmentation controls if we didn't already
+        z = AUTOREGRESS
 
     if debug:
         fmt = 'Processed {} sequences (discarded {} tracks, discarded {} seqs, added {} rest tokens)'
