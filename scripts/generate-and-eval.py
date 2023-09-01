@@ -14,6 +14,7 @@ from anticipation import ops
 from anticipation.sample_inter import generate_inter_eval
 from anticipation.convert import events_to_midi
 from anticipation.visuals import visualize
+from anticipation.config import *
 
 from anticipation.vocab import SEPARATOR
 
@@ -23,8 +24,8 @@ from scipy.signal import lfilter
 
 LENGTH_IN_SECONDS = 120
 
-MODEL_NAME = 'driven-plant-48'
-STEP_NUMBER = 30000
+MODEL_NAME = 'toasty-silence-91' #'driven-plant-48'
+STEP_NUMBER = 115000
 
 FILTER_CONST = 100
 
@@ -38,7 +39,7 @@ if not os.path.exists(OUTPUT_DIR):
 i = 0
 start = time.time()
 
-TOP_P = 1.0 #0.99
+TOP_P = 0.95 #0.99
 
 GET_PROMPT = False
 PROMPT_FILE = f'/nlp/scr/kathli/output/test/test-3.txt'
@@ -47,9 +48,9 @@ if GET_PROMPT:
         prompt = [int(token) for token in f.read().split()]
     #prompt = prompt[:1116]
     prompt = prompt[447:3000]
-    generated_tokens, max_probs = generate_inter_eval(model, LENGTH_IN_SECONDS, prompt=prompt, top_p=TOP_P, debug=False)
+    generated_tokens, max_probs = generate_inter_eval(model, LENGTH_IN_SECONDS, prompt=prompt, top_p=TOP_P, debug=False, add_token="short")
 else:
-    generated_tokens, max_probs = generate_inter_eval(model, LENGTH_IN_SECONDS, top_p=TOP_P, debug=False)
+    generated_tokens, max_probs = generate_inter_eval(model, LENGTH_IN_SECONDS, top_p=TOP_P, debug=False, add_token="short")
 print("first 100 tokens", generated_tokens[:100])
 print("last 99 tokens", generated_tokens[-99:])
 print("num tokens generated", len(generated_tokens))
@@ -67,6 +68,7 @@ end = time.time()
 #ops.print_tokens(generated_tokens)
 print("instruments", ops.get_instruments(generated_tokens))
 print("time", end - start)
+print("top p", TOP_P)
 mid = events_to_midi(ops.clip(generated_tokens, 0, LENGTH_IN_SECONDS))
 mid.save(f'{OUTPUT_DIR}/generated-{i}.mid')
 print(f'saved at {OUTPUT_DIR}/generated-{i}.mid')
@@ -121,7 +123,7 @@ plt.savefig(f'{OUTPUT_DIR}/generated-{i}-max_probs_1_3.png')
 plt.figure(4)
 plt.savefig(f'{OUTPUT_DIR}/generated-{i}-max_probs_2_3.png')
 
-visualize(generated_tokens, f'{OUTPUT_DIR}/generated-{i}.png', length=LENGTH_IN_SECONDS)
+visualize(generated_tokens, f'{OUTPUT_DIR}/generated-{i}.png', length=LENGTH_IN_SECONDS * TIME_RESOLUTION)
 
 # write generated_tokens to generated-{i}.txt
 with open(f'{OUTPUT_DIR}/generated-{i}.txt', 'w') as f:

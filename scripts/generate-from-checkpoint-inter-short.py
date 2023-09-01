@@ -14,6 +14,7 @@ from anticipation import ops
 from anticipation.sample_inter import generate_inter
 from anticipation.convert import events_to_midi
 from anticipation.visuals import visualize
+from anticipation.config import *
 
 from anticipation.vocab import SEPARATOR
 
@@ -64,7 +65,7 @@ while os.path.exists(f'{OUTPUT_DIR}/generated-{i}.mid'):
     i += 1
 mid.save(f'{OUTPUT_DIR}/generated-{i}.mid')
 print(f'saved at {OUTPUT_DIR}/generated-{i}.mid')
-visualize(generated_tokens, f'{OUTPUT_DIR}/generated-{i}.png', length=LENGTH_IN_SECONDS)
+visualize(generated_tokens, f'{OUTPUT_DIR}/generated-{i}.png', length=LENGTH_IN_SECONDS * TIME_RESOLUTION)
 
 # write generated_tokens to generated-{i}.txt
 with open(f'{OUTPUT_DIR}/generated-{i}.txt', 'w') as f:

@@ -14,6 +14,7 @@ from anticipation import ops
 from anticipation.sample import generate
 from anticipation.convert import events_to_midi
 from anticipation.visuals import visualize
+from anticipation.config import *
 
 from anticipation.vocab import SEPARATOR
 

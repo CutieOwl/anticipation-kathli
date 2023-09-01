@@ -52,7 +52,7 @@ def instr_logits_inter(logits, full_history):
 
 def safe_logits_inter(logits, idx):
     logits[CONTROL_OFFSET:SPECIAL_OFFSET] = -float('inf') # don't generate controls
-    logits[SPECIAL_OFFSET+1:] = -float('inf')               # don't generate special tokens (except SEP)
+    logits[SPECIAL_OFFSET:] = -float('inf')               # don't generate special tokens (except SEP)
     #logits[9999] = -float('inf')                          # don't generate UNK
 
     # don't generate stuff in the wrong time slot
@@ -159,6 +159,61 @@ def add_token_inter_short(model, z, tokens, top_p, current_time, debug=False, pa
     return new_token, past
 
 
+def add_token_inter_short_eval(model, z, tokens, top_p, current_time, debug=False, past=None, use_9999=False):
+    assert len(tokens) % 3 == 0
+    #print("inside short inter add token")
+    history = tokens.copy()
+    lookback = max(len(tokens) - 1011, 0)
+    history = history[lookback:] # Markov window
+    #offset = ops.min_time(history, seconds=False)
+    #history[::3] = [tok - offset for tok in history[::3]] # relativize time in the history buffer
+
+    num_tokens = len(tokens)
+
+    new_token = []
+    max_probs = []
+    with torch.no_grad():
+        for i in range(3):
+            input_tokens = torch.tensor(z + history + new_token).unsqueeze(0).to(model.device)
+            if use_9999:
+                if input_tokens.shape[1] > 1:
+                    input_tokens[0, 1] = 9999
+            #print("input_tokens", input_tokens)
+            #print("input tokens shape", input_tokens.shape)
+            output = model(input_tokens)
+        
+            #print("output_logits", output.logits.shape)
+            logits = output.logits[0, -1, :]
+            #print("logits", logits.shape)
+            idx = input_tokens.shape[1]-1
+            logits = safe_logits_inter(logits, idx)
+            if i == 2:
+                logits = instr_logits_inter(logits, tokens)
+            
+            if (num_tokens % 2000) in range(0, 15) and num_tokens > 1000:
+                logits = nucleus(logits, 1.0)
+                probs = F.softmax(logits / 1.25, dim=-1)
+            elif (num_tokens % 2000) in range(15, 30) and num_tokens > 1000:
+                logits = nucleus(logits, 1.0)
+                probs = F.softmax(logits / 1.1, dim=-1)
+            elif (num_tokens % 2000) in range(999, 1029) and num_tokens > 1000:
+                logits = nucleus(logits, 1.0)
+                probs = F.softmax(logits / 1.1, dim=-1)
+            else:
+                logits = nucleus(logits, top_p)
+                probs = F.softmax(logits, dim=-1)
+
+            token = torch.multinomial(probs, 1)
+            new_token.append(int(token))
+
+            max_probs.append(probs.max().item())
+
+            past = None #output.past_key_values
+
+    #new_token[0] += offset # revert to full sequence timing
+    return new_token, past, max_probs
+
+
 def add_token_inter_eval(model, z, tokens, top_p, current_time, debug=False, past=None):
     assert len(tokens) % 3 == 0
 
@@ -167,6 +222,8 @@ def add_token_inter_eval(model, z, tokens, top_p, current_time, debug=False, pas
     #history = history[lookback:] # Markov window
     #offset = ops.min_time(history, seconds=False)
     #history[::3] = [tok - offset for tok in history[::3]] # relativize time in the history buffer
+
+    num_tokens = len(tokens)
 
     new_token = []
     max_probs = []
@@ -189,10 +246,25 @@ def add_token_inter_eval(model, z, tokens, top_p, current_time, debug=False, pas
             logits = safe_logits_inter(logits, idx)
             if i == 2:
                 logits = instr_logits_inter(logits, tokens)
-            logits = nucleus(logits, top_p)
-            probs = F.softmax(logits, dim=-1)
+            # use top_p 1.0 if num_tokens is between 0 and 30 mod 1000
+            if (num_tokens % 2000) in range(0, 15) and num_tokens > 1000:
+                logits = nucleus(logits, 1.0)
+                probs = F.softmax(logits / 1.25, dim=-1)
+            elif (num_tokens % 2000) in range(15, 30) and num_tokens > 1000:
+                logits = nucleus(logits, 1.0)
+                probs = F.softmax(logits / 1.1, dim=-1)
+            elif (num_tokens % 2000) in range(999, 1029) and num_tokens > 1000:
+                logits = nucleus(logits, 1.0)
+                probs = F.softmax(logits / 1.1, dim=-1)
+            else:
+                logits = nucleus(logits, top_p)
+                probs = F.softmax(logits, dim=-1)
+            
+            #print(probs)
 
+            #token = torch.argmax(probs)
             token = torch.multinomial(probs, 1)
+            #print(token)
             new_token.append(int(token))
             
             max_probs.append(probs.max().item())
@@ -225,7 +297,6 @@ def generate_inter(model, end_time, prompt = None, top_p=1.0, debug=False, use_9
                 new_token, past_kv = add_token_inter_short(model, z, tokens, top_p, max(start_time,current_time), past=past_kv, use_9999=use_9999)
             else:
                 new_token, past_kv = add_token_inter(model, z, tokens, top_p, max(start_time,current_time), past=past_kv)
-            #print("new token", new_token)
             dt = new_token[0]
             assert dt >= 0
             if dt == 9999:
@@ -255,7 +326,7 @@ def generate_inter(model, end_time, prompt = None, top_p=1.0, debug=False, use_9
     return tokens
 
 
-def generate_inter_eval(model, end_time, prompt = None, top_p=1.0, debug=False, use_9999=False):
+def generate_inter_eval(model, end_time, prompt = None, top_p=1.0, debug=False, use_9999=False, add_token=None):
     start_time = 0
     end_time = int(TIME_RESOLUTION*end_time)
 
@@ -274,8 +345,13 @@ def generate_inter_eval(model, end_time, prompt = None, top_p=1.0, debug=False, 
     with tqdm(range(end_time)) as progress:
         while True:
             #print("tokens", tokens)
-            new_token, past_kv, new_probs = add_token_inter_eval(model, z, tokens, top_p, max(start_time,current_time), past=past_kv)
+            if add_token == "short":
+                new_token, past_kv, new_probs = add_token_inter_short_eval(model, z, tokens, top_p, max(start_time,current_time), past=past_kv, use_9999=use_9999)
+            else:
+                new_token, past_kv, new_probs = add_token_inter_eval(model, z, tokens, top_p, max(start_time,current_time), past=past_kv)
+            #new_token, past_kv, new_probs = add_token_inter_eval(model, z, tokens, top_p, max(start_time,current_time), past=past_kv)
             #print("new token", new_token)
+            #print(new_probs)
             dt = new_token[0]
             assert dt >= 0
             if dt == 9999:

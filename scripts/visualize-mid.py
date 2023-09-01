@@ -14,6 +14,8 @@ from anticipation import ops
 from anticipation.sample_inter import generate_inter
 from anticipation.convert import events_to_midi
 from anticipation.visuals import visualize
+from anticipation.config import *
+from anticipation.vocab import *
 
 from anticipation.vocab import AUTOREGRESS, ANTICIPATE
 from anticipation.vocab import SEPARATOR
@@ -25,9 +27,10 @@ from anticipation.vocab import SEPARATOR
 # call visualize(tokens, OUTPUT_DIR/generated-10.png)
 #visualize(tokens, f'{OUTPUT_DIR}/generated-10.png')
 
-FILE = '/nlp/scr/kathli/datasets/lakh-data-inter-16384/test.txt'
+FILE = 'generated-16'
+FILE_DIR = '/nlp/scr/kathli/output/driven-plant-48'
 #FILE = '/nlp/scr/kathli/datasets/lakh-data-inter-16384/test-16-17.txt'
-OUTPUT_DIR = '/nlp/scr/kathli/output/test'
+OUTPUT_DIR = '/nlp/scr/kathli/output/driven-plant-48/'
 INDEX = 0
 
 INDEX1 = 16
@@ -35,7 +38,7 @@ INDEX2 = 17
 
 ret = []
 
-with open(FILE, 'r') as f:
+with open(f'{FILE_DIR}/{FILE}.txt', 'r') as f:
     for i, line in enumerate(f):
         if i < INDEX:
             continue
@@ -57,10 +60,10 @@ with open(FILE, 'r') as f:
 
         #visualize(tokens, f'{OUTPUT_DIR}/test-.png')
         
-        mid = events_to_midi(tokens[:8670], debug=True)
+        mid = events_to_midi(tokens, debug=True)
 
-        mid.save(f'{OUTPUT_DIR}/test-{i}.mid')
-        visualize(tokens, f'{OUTPUT_DIR}/test-{i}.png')
+        #mid.save(f'{OUTPUT_DIR}/test-{i}.mid')
+        visualize(tokens, f'{FILE_DIR}/{FILE}.png', length=(int(mid.length)) * TIME_RESOLUTION)
         print(f'{i} Tokenized MIDI Length: {mid.length} seconds ({len(tokens)} tokens)')
 
         # save tokens[:8670] to OUTPUT_DIR/test-INDEX.txt

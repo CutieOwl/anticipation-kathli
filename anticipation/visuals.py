@@ -11,7 +11,7 @@ import anticipation.ops as ops
 from anticipation.config import *
 from anticipation.vocab import *
 
-def visualize(tokens, output, selected=None, length=120):
+def visualize(tokens, output, selected=None, length=12000):
     #colors = ['white', 'silver', 'red', 'sienna', 'darkorange', 'gold', 'yellow', 'palegreen', 'seagreen', 'cyan',
     #          'dodgerblue', 'slategray', 'navy', 'mediumpurple', 'mediumorchid', 'magenta', 'lightpink']
     colors = ['white', '#426aa0', '#b26789', '#de9283', '#eac29f', 'silver', 'red', 'sienna', 'darkorange', 'gold', 'yellow', 'palegreen', 'seagreen', 'cyan', 'dodgerblue', 'slategray', 'navy']
@@ -19,7 +19,7 @@ def visualize(tokens, output, selected=None, length=120):
     plt.rcParams['figure.dpi'] = 300
     plt.rcParams['savefig.dpi'] = 300
  
-    max_time = length * TIME_RESOLUTION #ops.max_time(tokens, seconds=False)
+    max_time = length#ops.max_time(tokens, seconds=False)
     grid = np.zeros([max_time, MAX_PITCH])
     instruments = list(sorted(list(ops.get_instruments(tokens).keys())))
     if 128 in instruments:

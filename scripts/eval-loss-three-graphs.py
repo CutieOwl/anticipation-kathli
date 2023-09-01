@@ -50,8 +50,8 @@ SHORTF_MODEL_LABEL = "finetune short"
 SHORTS_MODEL_LABEL = "single-stage short" #SHORT_MODEL_NAME
 LONG_MODEL_LABEL = "finetune long" # LONG_MODEL_NAME
 
-DATAFILE = 'generated-20'
-DATA = f'/nlp/scr/kathli/output/driven-plant-48/{DATAFILE}.txt' #f'/nlp/scr/kathli/eval/rep_struct/{DATAFILE}.txt'  # f"/nlp/scr/kathli/datasets/{DATASET}/test.txt" 
+DATAFILE = 'f00b13ee'
+DATA = f'/nlp/scr/kathli/eval/rep_struct/{DATAFILE}.txt' #f'/nlp/scr/kathli/output/driven-plant-48/{DATAFILE}.txt' # f"/nlp/scr/kathli/datasets/{DATASET}/test.txt" 
 SHORTF_CHECKPOINT= f"/nlp/scr/kathli/checkpoints/{SHORTF_MODEL_NAME}/step-{SHORTF_STEP_NUMBER}/hf"
 SHORTS_CHECKPOINT= f"/nlp/scr/kathli/checkpoints/{SHORTS_MODEL_NAME}/step-{SHORTS_STEP_NUMBER}/hf"
 LONG_CHECKPOINT = f"/nlp/scr/kathli/checkpoints/{LONG_MODEL_NAME}/step-{LONG_STEP_NUMBER}/hf"
@@ -127,6 +127,7 @@ if __name__ == '__main__':
             if i % SUBSAMPLE != PRINT_IDX: continue
             
             tokens = [int(token) for token in line.split()]
+            #tokens = tokens[:8192]
             if tokens[0] != AUTOREGRESS:
                 print("inserting AUTOREGRESS")
                 tokens.insert(0, AUTOREGRESS)

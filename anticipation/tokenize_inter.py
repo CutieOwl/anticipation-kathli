@@ -264,7 +264,6 @@ def tokenize_single_inter(datafile, output_file, augment_factor, idx=0, debug=Fa
         # make sure we did not somehow end up with negative time
         assert ops.min_time(tokens, seconds=False) >= 0
 
-        tokens[0:0] = [SEPARATOR, SEPARATOR, SEPARATOR]
         concatenated_tokens.extend(tokens)
 
         # write out the first sequence to file (doesn't use the rest of the file)
@@ -273,9 +272,6 @@ def tokenize_single_inter(datafile, output_file, augment_factor, idx=0, debug=Fa
         
         # if seq contains SEPARATOR, global controls describe the first sequence
         seq.insert(0, z)
-
-        indices = [index for index, value in enumerate(seq) if value == SEPARATOR]
-        #print(indices)
 
         outfile.write(' '.join([str(tok) for tok in seq]) + '\n')
         seqcount += 1
