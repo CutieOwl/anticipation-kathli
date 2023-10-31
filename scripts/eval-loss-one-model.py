@@ -27,20 +27,20 @@ from anticipation.config import M, EVENT_SIZE
 from anticipation.vocab import MIDI_TIME_OFFSET, MIDI_START_OFFSET, TIME_RESOLUTION, AUTOREGRESS
 from anticipation.ops import max_time
 
-DATASET = "lakh-data-aar"
-MODEL_NAME = "helpful-fire-22"
-STEP_NUMBER = 100000
-SEQ_LEN = 1024 # must be 1 mod 3
-NEW_CE_CUTOFF = 255 # must be less than SEQ_LEN
+DATASET = "lakh-data-inter-16384"
+MODEL_NAME = "1381mqhz"
+STEP_NUMBER = 15000
+SEQ_LEN = 16384 # must be 1 mod 3
+NEW_CE_CUTOFF = 8192 # must be less than SEQ_LEN
 PRINT_GRAPH = False
 PRINT_IDX = 0 # must be less than SUBSAMPLE, leave as 0 for default
 PRINT_UP_TO_IDX = 16384 # none if we print the entire example
 FILTER_CONST = 100
-SUBSAMPLE=100
+SUBSAMPLE=1000
 REMOVE_9999 = False
 ADD_9999 = False
 
-DATA = f"/nlp/scr/kathli/datasets/{DATASET}/test.txt" 
+DATA = f"/nlp/scr/kathli/datasets/{DATASET}/train.txt" 
 #DATAFILE = 'generated-21'
 #DATA = f'/nlp/scr/kathli/output/driven-plant-48/{DATAFILE}.txt'
 CHECKPOINT= f"/nlp/scr/kathli/checkpoints/{MODEL_NAME}/step-{STEP_NUMBER}/hf"
@@ -51,6 +51,7 @@ t0 = time.time()
 
 config = json.load(open(f"{CHECKPOINT}/config.json"))
 config["n_positions"] = SEQ_LEN
+print("config", config)
 config = GPT2Config.from_dict(config)
 model = GPT2LMHeadModel.from_pretrained(CHECKPOINT, config=config).cuda() #
 print(f'Loaded model ({time.time()-t0} seconds)')
@@ -160,9 +161,11 @@ if __name__ == '__main__':
         print('num samples', num_samples)
         print(num_samples * (SEQ_LEN - 1)) # 1023 
         L = ce.mean()
+        V = ce.var()
         print('Tokens processed:', len(ce))
         print('Log-losses')
         print('  -> per-token log-loss (nats): ', L)
+        print('  -> log loss variance: ', V)
         print('  -> bits per second: ', L*np.log2(np.e)*(num_samples * (SEQ_LEN - 1) / (560.98*3600)))
         #print('  -> bits per second: ', L*np.log2(np.e)*(num_samples * (SEQ_LEN - 1) / (7827*3600)))
         if not args.interarrival:
@@ -174,9 +177,11 @@ if __name__ == '__main__':
         print('------------------------------')
         print(f'Calculations on the last {NEW_CE_CUTOFF} tokens')
         L = new_ce.mean()
+        V = new_ce.var()
         print('Tokens processed:', len(new_ce))
         print('Log-losses')
         print('  -> per-token log-loss (nats): ', L)
+        print('  -> log loss variance: ', V)
         print('  -> bits per second: ', L*np.log2(np.e)*(num_samples * (SEQ_LEN - 1) / (560.98*3600)))
         #print('  -> bits per second: ', L*np.log2(np.e)*(num_samples * (SEQ_LEN - 1) / (7827*3600)))
         if not args.interarrival:

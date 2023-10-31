@@ -21,7 +21,7 @@ from anticipation.vocab import SEPARATOR
 
 LENGTH_IN_SECONDS = 120
 
-MODEL_NAME = 'fh86cy5o'
+MODEL_NAME = 'uk31obfe'
 STEP_NUMBER = 115000
 
 SEQ_LEN = 16384
@@ -43,7 +43,7 @@ if not os.path.exists(OUTPUT_DIR):
 i = 0
 start = time.time()
 
-TOP_P = 0.99
+TOP_P = 0.995
 
 GET_PROMPT = True
 PROMPT_LENGTH=47

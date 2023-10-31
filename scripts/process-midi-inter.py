@@ -17,32 +17,42 @@ from anticipation.convert import midi_to_compound
 from anticipation.visuals import visualize
 
 FILENAME = 'f001f0a844e3f095eb60041cf528ad16'
-SHORT_FILENAME = FILENAME[:8]
 
-FILE_DIR = '/nlp/scr/kathli/eval/rep_struct'
-FILE = f'{FILE_DIR}/{FILENAME}.mid.compound.txt'
+if __name__ == '__main__':
+    # args parser with argument -f for filename
+    parser = ArgumentParser()
+    parser.add_argument('-f', '--filename', type=str, help='filename of midi to process', default=FILENAME)
 
-if not os.path.exists(FILE):
-    MIDI_FILE = f'{FILE_DIR}/{FILENAME}.mid'
-    tokens = midi_to_compound(MIDI_FILE, debug=True)
+    args = parser.parse_args()
+    FILENAME = args.filename
 
-    with open(FILE, 'w') as f:
-        f.write(' '.join(str(tok) for tok in tokens))
+    SHORT_FILENAME = FILENAME[:8]
 
-OUTPUT_FILE = f'/{FILE_DIR}/{SHORT_FILENAME}.txt'
-AUGMENT = 1
+    print("Processing", FILENAME)
+    FILE_DIR = '/nlp/scr/kathli/eval/rep_struct'
+    FILE = f'{FILE_DIR}/{FILENAME}.mid.compound.txt'
 
-results = tokenize_single_inter(FILE, OUTPUT_FILE, AUGMENT, 0)
+    if not os.path.exists(FILE):
+        MIDI_FILE = f'{FILE_DIR}/{FILENAME}.mid'
+        tokens = midi_to_compound(MIDI_FILE, debug=True)
 
-with open(OUTPUT_FILE, 'r') as f:
-    line = f.readline()
-    tokens = [int(token) for token in line.split()]
-    if tokens[0] in [AUTOREGRESS, ANTICIPATE]:
-        tokens = tokens[1:] # strip control codes
+        with open(FILE, 'w') as f:
+            f.write(' '.join(str(tok) for tok in tokens))
 
-    mid = events_to_midi(tokens, debug=True)
-    mid.save(f'{FILE_DIR}/{SHORT_FILENAME}.mid')
-    print(f'{SHORT_FILENAME} Tokenized MIDI Length: {mid.length} seconds ({len(tokens)} tokens)')
+    OUTPUT_FILE = f'{FILE_DIR}/{SHORT_FILENAME}.txt'
+    AUGMENT = 1
 
-    visualize(tokens, f'{FILE_DIR}/{SHORT_FILENAME}.png', length=int(mid.length) * TIME_RESOLUTION)
+    results = tokenize_single_inter(FILE, OUTPUT_FILE, AUGMENT, 0)
+
+    with open(OUTPUT_FILE, 'r') as f:
+        line = f.readline()
+        tokens = [int(token) for token in line.split()]
+        if tokens[0] in [AUTOREGRESS, ANTICIPATE]:
+            tokens = tokens[1:] # strip control codes
+
+        mid = events_to_midi(tokens, debug=True)
+        mid.save(f'{FILE_DIR}/{SHORT_FILENAME}.mid')
+        print(f'{SHORT_FILENAME} Tokenized MIDI Length: {mid.length} seconds ({len(tokens)} tokens)')
+
+        visualize(tokens, f'{FILE_DIR}/{SHORT_FILENAME}.png', length=int(mid.length) * TIME_RESOLUTION)
     
