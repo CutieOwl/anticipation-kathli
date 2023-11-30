@@ -6,6 +6,7 @@ anticipation/audio.py
 anticipation/audiovocab.py
 anticipation/config.py
 anticipation/convert.py
+anticipation/mmvocab.py
 anticipation/ops.py
 anticipation/sample.py
 anticipation/sample_inter.py

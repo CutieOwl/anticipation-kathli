@@ -58,46 +58,53 @@ def read_ecdc(ecdc_file, model, max_frames=None):
 
 
 def tokenize(frames, scales, vocab):
-    residuals = vocab['residuals']
+    residuals = vocab['config']['residuals']
+    offsets = torch.tensor(vocab['residual_offset'])[:,None]
     assert residuals > 0
 
     # truncate unused residuals and add offsets for each residual vocabulary
-    frames = [frame[0,:residuals] for frame in frames]
-    for i in range(residuals):
-        frames[i::residuals] = [token + vocab['residual_offset'][i] for token in frames[i::residuals]]
+    frames = [frame[0,:residuals] + offsets for frame in frames]
 
     # represent scales with dummy residuals so that the model can treat everything homogeneously
     scales = [torch.tensor([s + vocab['scale_offset']] + (residuals-1)*[vocab['scale_pad']]).view(residuals,1) for s in scales]
 
     # tack the scales onto the front of each (1-second) block of audio codes
-    chunks = torch.cat([v for pair in zip(scales, frames) for v in pair], axis=1)
+    chunks = [v for pair in zip(scales, frames) for v in pair]
 
+    return torch.cat(chunks, axis=1)
+
+
+def skew(blocks, block_size, pad):
     # MusicGen-style interleaving
-    codes = F.pad(chunks, (0,residuals-1), mode='constant', value=vocab['residual_pad'])
-    codes = torch.stack([torch.roll(codes[i], i) for i in range(residuals)])
+    codes = F.pad(blocks, (0,block_size-1), mode='constant', value=pad)
+    codes = torch.stack([torch.roll(codes[i], i) for i in range(block_size)])
 
     # flatten the codes into a sequence
     return codes.T.flatten().tolist()
 
 
-def detokenize(codes, vocab):
-    residuals = vocab['residuals']
+def deskew(tokens, block_size):
+    # unroll the MusicGen interleaving
+    blocks = torch.tensor(tokens).reshape(-1, block_size).T
+    blocks = torch.stack([torch.roll(blocks[i], -i) for i in range(block_size)])[:,:-(block_size-1)]
+
+    return blocks
+
+
+def detokenize(blocks, vocab):
+    residuals = vocab['config']['residuals']
+    offsets = torch.tensor(vocab['residual_offset'])[:,None]
     assert residuals > 0
 
-    # unroll the MusicGen interleaving
-    codes = torch.tensor(codes).reshape(-1, residuals).T
-    codes = torch.stack([torch.roll(codes[i], -i) for i in range(residuals)])[:,:-(residuals-1)]
-
     # split up the codes into (1-second) blocks
-    chunks = [codes[:, i:i+151].unsqueeze(0) for i in range(0, codes.shape[1], 151)]
+    chunks = [blocks[:, i:i+151].unsqueeze(0) for i in range(0, blocks.shape[1], 151)]
 
     # split up the scales and frames
     scales = [int(chunk[0,0,0]) - vocab['scale_offset'] for chunk in chunks]
     frames = [chunk[:,:,1:] for chunk in chunks]
 
     # remove offsets for the residual vocabularies
-    for i in range(residuals):
-        frames[i::residuals] = [token - vocab['residual_offset'][i] for code in frames[i::residuals]]
+    frames = [frame - offsets for frame in frames]
 
     return frames, scales
 
@@ -105,6 +112,10 @@ def detokenize(codes, vocab):
 def pack_tokens(ecdcs, output, idx, vocab, seqlen):
     model = EncodecModel.encodec_model_48khz()
     separator = vocab['separator']
+    task = vocab['task']['audiogen']
+    content = vocab['content_type']['clean_audio']
+    control_pad = vocab['control_pad']
+    z = [task, content, control_pad, control_pad]
 
     files = bad_files = seqcount = 0
     with open(output, 'w') as outfile:
@@ -122,8 +133,9 @@ def pack_tokens(ecdcs, output, idx, vocab, seqlen):
             files += 1
 
             # write out full sequences to file
-            while len(concatenated_tokens) >= seqlen:
-                seq = concatenated_tokens[0:seqlen]
+            while len(concatenated_tokens) >= seqlen-4:
+                seq = concatenated_tokens[0:seqlen-4]
+                seq = z + seq
                 concatenated_tokens = concatenated_tokens[seqlen:]
 
                 outfile.write(' '.join([str(tok) for tok in seq]) + '\n')

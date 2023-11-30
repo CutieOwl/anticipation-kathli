@@ -125,7 +125,9 @@ def interarrival_to_midi(tokens, debug=False):
     return mid
 
 
-def midi_to_compound(midifile, debug=False):
+def midi_to_compound(midifile, vocab, debug=False):
+    time_res = vocab['config']['time_resolution']
+
     if type(midifile) == str:
         midi = mido.MidiFile(midifile)
     else:
@@ -153,7 +155,7 @@ def midi_to_compound(midifile, debug=False):
 
             if message.type == 'note_on' and message.velocity > 0: # onset
                 # time quantization
-                time_in_ticks = round(TIME_RESOLUTION*time)
+                time_in_ticks = round(time_res*time)
 
                 # Our compound word is: (time, duration, note, instr, velocity)
                 tokens.append(time_in_ticks) # 5ms resolution
@@ -171,7 +173,7 @@ def midi_to_compound(midifile, debug=False):
                     if debug:
                         print('WARNING: ignoring bad offset')
                 else:
-                    duration_ticks = round(TIME_RESOLUTION*(time-onset_time))
+                    duration_ticks = round(time_res*(time-onset_time))
                     tokens[5*open_idx + 1] = duration_ticks
                     #del open_notes[(instr,message.note,message.channel)]
         elif message.type == 'set_tempo':
@@ -205,17 +207,15 @@ def midi_to_compound(midifile, debug=False):
     return tokens
 
 
-def compound_to_midi(tokens, debug=False):
+def compound_to_midi(tokens, vocab, debug=False):
     mid = mido.MidiFile()
-    mid.ticks_per_beat = TIME_RESOLUTION // 2 # 2 beats/second at quarter=120
+    mid.ticks_per_beat = vocab['config']['time_resolution'] // 2 # 2 beats/second at quarter=120
 
     it = iter(tokens)
     time_index = defaultdict(list)
-    curr_time = 0
-    for _, (time_diff,duration,note,instrument,velocity) in enumerate(zip(it,it,it,it,it)):
-        time_index[(curr_time+time_diff,0)].append((note, instrument, velocity)) # 0 = onset
-        time_index[(curr_time+time_diff+duration,1)].append((note, instrument, velocity)) # 1 = offset
-        curr_time += time_diff
+    for _, (time_in_ticks,duration,note,instrument,velocity) in enumerate(zip(it,it,it,it,it)):
+        time_index[(time_in_ticks,0)].append((note, instrument, velocity)) # 0 = onset
+        time_index[(time_in_ticks+duration,1)].append((note, instrument, velocity)) # 1 = offset
 
     track_idx = {} # maps instrument to (track number, current time)
     num_tracks = 0
@@ -225,8 +225,6 @@ def compound_to_midi(tokens, debug=False):
                 try:
                     track, previous_time, idx = track_idx[instrument]
                 except KeyError:
-                    #print(track_idx.keys())
-                    #print("instrument", instrument)
                     idx = num_tracks
                     previous_time = 0
                     track = mido.MidiTrack()
@@ -299,13 +297,25 @@ def events_to_compound(tokens, debug=False):
     tokens = unpad(tokens)
 
     # move all tokens to zero-offset for synthesis
-    #tokens = [tok - CONTROL_OFFSET if tok >= CONTROL_OFFSET and tok != SEPARATOR else tok
-    #          for tok in tokens]
+    tokens = [tok - CONTROL_OFFSET if tok >= CONTROL_OFFSET and tok != SEPARATOR else tok
+              for tok in tokens]
 
     # remove type offsets
     tokens[0::3] = [tok - TIME_OFFSET if tok != SEPARATOR else tok for tok in tokens[0::3]]
     tokens[1::3] = [tok - DUR_OFFSET if tok != SEPARATOR else tok for tok in tokens[1::3]]
     tokens[2::3] = [tok - NOTE_OFFSET if tok != SEPARATOR else tok for tok in tokens[2::3]]
+
+    offset = 0 # add max time from previous track for synthesis
+    track_max = 0 # keep track of max time in track
+    for j, (time,dur,note) in enumerate(zip(tokens[0::3],tokens[1::3],tokens[2::3])):
+        if note == SEPARATOR:
+            offset += track_max
+            track_max = 0
+            if debug:
+                print('Sequence Boundary')
+        else:
+            track_max = max(track_max, time+dur)
+            tokens[3*j] += offset
 
     # strip sequence separators
     assert len([tok for tok in tokens if tok == SEPARATOR]) % 3 == 0
@@ -319,7 +329,6 @@ def events_to_compound(tokens, debug=False):
     out[3::5] = [tok//2**7 for tok in tokens[2::3]]
     out[4::5] = (len(tokens)//3)*[72] # default velocity
 
-    assert max(out[0::5]) < 1000
     assert max(out[1::5]) < MAX_DUR
     assert max(out[2::5]) < MAX_PITCH
     assert max(out[3::5]) < MAX_INSTR

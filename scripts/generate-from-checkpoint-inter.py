@@ -21,7 +21,7 @@ from anticipation.vocab import SEPARATOR
 
 LENGTH_IN_SECONDS = 120
 
-MODEL_NAME = 'uk31obfe'
+MODEL_NAME = 'kly1r553'
 STEP_NUMBER = 115000
 
 SEQ_LEN = 16384
@@ -43,9 +43,9 @@ if not os.path.exists(OUTPUT_DIR):
 i = 0
 start = time.time()
 
-TOP_P = 0.995
+TOP_P = 0.99
 
-GET_PROMPT = True
+GET_PROMPT = False
 PROMPT_LENGTH=47
 PROMPT_FILE = f'/nlp/scr/kathli/output/test/test-3.txt'
 if GET_PROMPT:

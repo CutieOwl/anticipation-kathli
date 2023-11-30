@@ -39,16 +39,20 @@ if __name__ == '__main__':
             separator_indices = [i for i, x in enumerate(tokens) if x == SEPARATOR]
             print("separator_indices", separator_indices)
 
-            new_start = ((max(separator_indices)+3) // 4) * 4
-            print("new_start", new_start)
-            tokens = tokens[new_start:]
+            #new_start = ((max(separator_indices)+3) // 4) * 4
+            #print("new_start", new_start)
+            #tokens = tokens[new_start:]
             # seek for the first complete frame
+            firstseek = -1
             for seek, tok in enumerate(tokens):
                 if SCALE_OFFSET < tok < SCALE_OFFSET + 100:
                     print("scale token at:", seek)
-                    break
+                    if firstseek == -1:
+                        firstseek = seek
+                    #break
 
-            tokens = tokens[seek:]
+            print("firstseek", firstseek)
+            tokens = tokens[firstseek:]
             
             # stop sonifying at EOS
             try:
@@ -63,8 +67,12 @@ if __name__ == '__main__':
             frames, scales = audio.detokenize(tokens, audiovocab.vocab)
             print("Frames len", len(frames))
             print("Scales len", len(scales))
+            print("Scales", scales)
+            print(frames[0].shape, frames[-1].shape)
+            print(frames[0].min(), frames[0].max(), frames[-1].min(), frames[-1].max())
             with torch.no_grad():
                 wav = model.decode(zip(frames, [torch.tensor(s/100.).view(1) for s in scales]))[0]
             lastDot = args.filename.rfind(".")
-            filename_audio = f'{args.filename[:lastDot]}.wav'
+            #filename_audio = f'{args.filename[:lastDot]}.wav'
+            filename_audio = '/nlp/scr/kathli/output/audio/dataset/test-{i}.wav'
             torchaudio.save(filename_audio, wav, model.sample_rate)

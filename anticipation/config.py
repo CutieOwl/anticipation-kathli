@@ -4,9 +4,9 @@ Global configuration for anticipatory infilling models.
 
 # model hyper-parameters
 
-CONTEXT_SIZE = 16384 # 1024               # model context
+CONTEXT_SIZE = 1024                # model context
 EVENT_SIZE = 3                     # each event/control is encoded as 3 tokens
-M = 5461 #     341                       # model context (1024 = 1 + EVENT_SIZE*M)
+M = 341                            # model context (1024 = 1 + EVENT_SIZE*M)
 DELTA = 5                          # anticipation time in seconds
 
 assert CONTEXT_SIZE == 1+EVENT_SIZE*M
@@ -32,12 +32,6 @@ MAX_TRACK_INSTR = 16               # exclude tracks with large numbers of instru
 MAX_TRACK_TIME_IN_SECONDS = 3600   # exclude very long tracks (longer than 1 hour)
 MIN_TRACK_TIME_IN_SECONDS = 10     # exclude very short tracks (less than 10 seconds)
 MIN_TRACK_EVENTS = 100             # exclude very short tracks (less than 100 events)
-
-# LakhMIDI dataset splits
-
-LAKH_SPLITS = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f']
-LAKH_VALID = ['e']
-LAKH_TEST = ['f']
 
 # derived quantities
 
