@@ -17,10 +17,10 @@ from anticipation.audiovocab import SEPARATOR
 MODEL = "49fupsao"
 STEP_NUM = 42430
 
-DATA = "/juice4/scr4/nlp/music/audio/dataset/test.txt" # this is the old audio tokenization dataset
-#DATA = "/juice4/scr4/nlp/music/datasets/valid/lakh.midigen.valid.txt" # this is the new midi tokenization dataset
+#DATA = "/juice4/scr4/nlp/music/audio/dataset/test.txt" # this is the old audio tokenization dataset
+DATA = "/juice4/scr4/nlp/music/datasets/valid/lakh.midigen.valid.txt" # this is the new midi tokenization dataset
 
-SUBSAMPLE = 1000
+SUBSAMPLE = 100
 SUBSAMPLE_IDX = 0
 
 # initialize the model and tokenizer

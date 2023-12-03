@@ -108,26 +108,69 @@ def fast_anticipate(audio, midi, delta):
     audio_fps = vocab['config']['audio_fps']
     midi_quantization = vocab['config']['midi_quantization']
     time_offset = vocab['time_offset']
+    ##print("time_offset", time_offset)
     audio = audio.clone().T
+    
+    # print("audio_shape", audio.shape)
+    # print("midi_shape", midi.shape)
 
     audio_idx = offset = 0
     time = delta*midi_quantization
+    ##print("time", time)
     time_ratio = audio_fps / float(midi_quantization)
+    ##print("time_ratio", time_ratio)
     max_pos = len(audio)
     blocks = torch.empty(audio.shape[0]+midi.shape[1], audio.shape[1], dtype=audio.dtype)
     for midi_block in midi.T:
         time += midi_block[0] - time_offset
+        ##print("cur_midi_time", time)
+        # if time > 1000:
+        #     break
 
         seqtime = math.floor(time*time_ratio) 
-        seqpos = max(seqtime, 0)      # events in first delta interval go at the start
-        seqpos = min(seqpos, max_pos) # events after the sequence go at the end
+        ##print("seqtime", seqtime)
 
-        blocks[audio_idx+offset:seqpos+offset] = audio[audio_idx:seqpos]
-        blocks[seqpos+offset] = midi_block
-        audio_idx = seqpos
-        offset += 1
+        if delta > 0:
+            # prevent it from possibly going back in time? worried about rounding error
+            seqpos = max(seqtime, audio_idx)  #max(seqtime, 0)      # events in first delta interval go at the start
+            seqpos = min(seqpos, max_pos) # events after the sequence go at the end
+            # case 1: midi is being anticipated.
+            # midi time 0 is at least 300.
+            # first insert audio blocks up to where the midi should occur
+            if seqpos > audio_idx and audio_idx < max_pos: # don't insert any audio if we're in a section of midi only
+                blocks[audio_idx+offset:seqpos+offset] = audio[audio_idx:seqpos]
+                ##print("inserting audio", audio_idx+offset, seqpos+offset)
+            # then insert midi block
+            blocks[seqpos+offset] = midi_block
+            ##print("inserting midi", seqpos+offset)
+            # update the indexes
+            audio_idx = seqpos
+            offset += 1
+            
+        if delta < 0:
+            # prevent it from possibly going back in time? worried about rounding error
+            seqpos = max(seqtime+1, audio_idx)  #max(seqtime, 0)      # events in first delta interval go at the start
+            seqpos = min(seqpos, max_pos) # events after the sequence go at the end
+            # case 2: audio is being anticipated
+            # midi time 0 is -300.
+            # first insert midi block 
+            # then insert audio blocks up to where the midi should occur
+            if seqpos > audio_idx: # don't insert any audio if we're in a section of midi only
+                blocks[audio_idx+offset:seqpos+offset] = audio[audio_idx:seqpos]
+                ##print("inserting audio", audio_idx+offset, seqpos+offset)
+            blocks[seqpos+offset] = midi_block
+            ##print("inserting midi", seqpos+offset)
+            offset += 1
+            audio_idx = seqpos
 
-    blocks[audio_idx+offset:] = audio[audio_idx:]
+        # blocks[audio_idx+offset:seqpos+offset] = audio[audio_idx:seqpos]
+        # blocks[seqpos+offset] = midi_block
+        # audio_idx = seqpos
+        # offset += 1
+
+    # insert any remaining audio
+    if audio_idx < max_pos:
+        blocks[audio_idx+offset:] = audio[audio_idx:]
 
     return blocks.T
 
@@ -297,7 +340,12 @@ def main(args):
         files = glob(os.path.join(args.datadir, '**/*.ecdc'), recursive=True)
 
     n = len(files) // args.workers
-    shards = [files[i:i+n] for i in range(args.workers)] # dropping a few tracks (< args.workers)
+    if args.debug:
+        shards = [files[0:n]]
+    else:
+        shards = [files[i:i+n] for i in range(args.workers)] # dropping a few tracks (< args.workers)
+    print("files:", len(files))
+    print("shards", len(shards))
     outfiles = os.path.join(args.outdir, os.path.basename(args.datadir) + '.{t}.shard-{s:03}.txt')
     print('Outputs to:', outfiles)
     outputs = [outfiles.format(t=args.type, s=s) for s in range(len(shards))]

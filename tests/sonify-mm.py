@@ -84,6 +84,8 @@ if __name__ == '__main__':
     else:
         raise ValueError(f'Invalid vocabulary type "{args.vocab}"')
 
+    save_path = '/nlp/scr/kathli/output/mm/bf5v4qyg' #mm_tok_out/sonify/trans_midigen'
+ 
     separator = vocab['separator']
     scale_offset = vocab['scale_offset']
     scale_res = vocab['config']['scale_resolution']
@@ -99,12 +101,16 @@ if __name__ == '__main__':
                 break
 
             tokens = [int(token) for token in line.split()]
+            blocks = tokens
 
             # strip the control block
             tokens = tokens[4:]
 
             # strip sequence separators
             tokens = [token for token in tokens if token != separator]
+
+            # strip control tokens
+            tokens = [token for token in tokens if token > 10]
 
             if skew:
                 blocks = audio.deskew(tokens, 4)
@@ -114,9 +120,12 @@ if __name__ == '__main__':
             if args.vocab == 'mm':
                 blocks, midi_blocks = split(blocks, vocab, args.debug)
                 if midi_blocks.shape[1] > 0:
+                    #mid = compound_to_midi(blocks, vocab) # this is compound only
                     mid = compound_to_midi(mm_to_compound(midi_blocks, vocab), vocab)
-                    mid.save(f'output/{Path(args.filename).stem}-{i}.mid')
 
+                mid.save(f'{save_path}/{Path(args.filename).stem}-{i}.mid')
+
+            continue
             if blocks.shape[1] == 0:
                 continue
 
@@ -137,4 +146,4 @@ if __name__ == '__main__':
                     scales = scales[:-1]
                 with torch.no_grad():
                     wav = model.decode(zip(frames, [torch.tensor(s/100.).view(1) for s in scales]))[0]
-                torchaudio.save(f'output/{Path(args.filename).stem}-{i}.wav', wav, model.sample_rate)
+                torchaudio.save(f'{save_path}/{Path(args.filename).stem}-{i}.wav', wav, model.sample_rate)
