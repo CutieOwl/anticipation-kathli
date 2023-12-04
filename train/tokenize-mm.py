@@ -101,6 +101,43 @@ def anticipate(audio, midi, delta):
     return blocks.T
 
 
+def get_midi_block(midi_T, midi_idx, midi_quantization, time_offset, curr_time_ub, midi_time):
+    if midi_idx >= midi_T.shape[0]:
+        return None, midi_idx, 0
+
+    midi_end_idx = midi_idx
+    while midi_time + midi_T[midi_end_idx, 0] - time_offset < curr_time_ub * midi_quantization:
+        midi_end_idx += 1
+        if midi_end_idx >= midi_T.shape[0]:
+            break
+        midi_time += midi_T[midi_end_idx, 0] - time_offset
+    
+    midi_block = midi_T[midi_idx:midi_end_idx]
+    # print(midi_block.shape)
+
+    return midi_block, midi_end_idx, midi_time
+
+
+def update_blocks(blocks, audio_block, midi_block, delta, block_idx, audio_header, midi_header):
+    if delta > 0:
+        blocks[block_idx] = audio_header
+        block_idx += 1
+        blocks[block_idx:block_idx+audio_block.shape[0]] = audio_block
+        block_idx += audio_block.shape[0]
+    blocks[block_idx] = midi_header
+    block_idx += 1
+    if midi_block is not None:
+        blocks[block_idx:block_idx+midi_block.shape[0]] = midi_block
+        block_idx += midi_block.shape[0]
+    if delta < 0:
+        blocks[block_idx] = audio_header
+        block_idx += 1
+        blocks[block_idx:block_idx+audio_block.shape[0]] = audio_block
+        block_idx += audio_block.shape[0]
+
+    return blocks, block_idx
+
+
 def fast_anticipate(audio, midi, delta):
     if len(midi) == 0:
         return audio 
@@ -108,69 +145,73 @@ def fast_anticipate(audio, midi, delta):
     audio_fps = vocab['config']['audio_fps']
     midi_quantization = vocab['config']['midi_quantization']
     time_offset = vocab['time_offset']
-    ##print("time_offset", time_offset)
+    num_residuals = vocab['config']['residuals']
     audio = audio.clone().T
-    
-    # print("audio_shape", audio.shape)
-    # print("midi_shape", midi.shape)
 
-    audio_idx = offset = 0
-    time = delta*midi_quantization
-    ##print("time", time)
-    time_ratio = audio_fps / float(midi_quantization)
-    ##print("time_ratio", time_ratio)
-    max_pos = len(audio)
-    blocks = torch.empty(audio.shape[0]+midi.shape[1], audio.shape[1], dtype=audio.dtype)
-    for midi_block in midi.T:
-        time += midi_block[0] - time_offset
-        ##print("cur_midi_time", time)
-        # if time > 1000:
-        #     break
+    if delta > 0:
+        audio_header = torch.tensor([vocab['task']['transcribe'], vocab['content_type']['transcribed_midi'], vocab['content_type']['clean_audio'], vocab['content_type']['clean_audio']])
+        midi_header = torch.tensor([vocab['task']['transcribe'], vocab['content_type']['transcribed_midi'], vocab['content_type']['clean_audio'], vocab['content_type']['transcribed_midi']])
+    else:
+        audio_header = torch.tensor([vocab['task']['synthesize'], vocab['content_type']['clean_audio'], vocab['content_type']['transcribed_midi'], vocab['content_type']['clean_audio']])
+        midi_header = torch.tensor([vocab['task']['synthesize'], vocab['content_type']['clean_audio'], vocab['content_type']['transcribed_midi'], vocab['content_type']['transcribed_midi']])
 
-        seqtime = math.floor(time*time_ratio) 
-        ##print("seqtime", seqtime)
+    audio_header = audio_header.unsqueeze(0)
+    midi_header = midi_header.unsqueeze(0)
 
-        if delta > 0:
-            # prevent it from possibly going back in time? worried about rounding error
-            seqpos = max(seqtime, audio_idx)  #max(seqtime, 0)      # events in first delta interval go at the start
-            seqpos = min(seqpos, max_pos) # events after the sequence go at the end
-            # case 1: midi is being anticipated.
-            # midi time 0 is at least 300.
-            # first insert audio blocks up to where the midi should occur
-            if seqpos > audio_idx and audio_idx < max_pos: # don't insert any audio if we're in a section of midi only
-                blocks[audio_idx+offset:seqpos+offset] = audio[audio_idx:seqpos]
-                ##print("inserting audio", audio_idx+offset, seqpos+offset)
-            # then insert midi block
-            blocks[seqpos+offset] = midi_block
-            ##print("inserting midi", seqpos+offset)
-            # update the indexes
-            audio_idx = seqpos
-            offset += 1
-            
-        if delta < 0:
-            # prevent it from possibly going back in time? worried about rounding error
-            seqpos = max(seqtime+1, audio_idx)  #max(seqtime, 0)      # events in first delta interval go at the start
-            seqpos = min(seqpos, max_pos) # events after the sequence go at the end
-            # case 2: audio is being anticipated
-            # midi time 0 is -300.
-            # first insert midi block 
-            # then insert audio blocks up to where the midi should occur
-            if seqpos > audio_idx: # don't insert any audio if we're in a section of midi only
-                blocks[audio_idx+offset:seqpos+offset] = audio[audio_idx:seqpos]
-                ##print("inserting audio", audio_idx+offset, seqpos+offset)
-            blocks[seqpos+offset] = midi_block
-            ##print("inserting midi", seqpos+offset)
-            offset += 1
-            audio_idx = seqpos
+    abs_delta = abs(delta)
+    audio_blocksize = audio_fps * abs_delta
 
-        # blocks[audio_idx+offset:seqpos+offset] = audio[audio_idx:seqpos]
-        # blocks[seqpos+offset] = midi_block
-        # audio_idx = seqpos
-        # offset += 1
+    num_extra_headers = math.ceil(audio.shape[0] / audio_blocksize)
+    num_blocks = audio.shape[0] + midi.shape[1] + num_extra_headers * 2
 
-    # insert any remaining audio
-    if audio_idx < max_pos:
-        blocks[audio_idx+offset:] = audio[audio_idx:]
+    #print(audio.shape)
+    #print(midi.shape)
+    #print(num_blocks)
+
+    midi_T = midi.T
+    blocks = torch.empty(num_blocks, audio.shape[1], dtype=audio.dtype)
+
+    midi_idx = 0
+    midi_time = 0
+    curr_time_ub = abs_delta
+    block_idx = 0
+    audio_idx = 0
+    while audio_idx < audio.shape[0]:
+        audio_block = audio[audio_idx:audio_idx+audio_blocksize]
+
+        # print("audio", audio_block.shape)
+
+        midi_block, midi_end_idx, midi_time = get_midi_block(midi_T, midi_idx, midi_quantization, time_offset, curr_time_ub, midi_time)
+        
+        # print("midi", midi_block.shape)
+        # print("prev block idx", block_idx)
+
+        blocks, block_idx = update_blocks(blocks, audio_block, midi_block, delta, block_idx, audio_header, midi_header)
+
+        # print("new block idx", block_idx)
+        # print("blocks shape", blocks.shape)
+
+        midi_idx = midi_end_idx
+        curr_time_ub += abs_delta
+        audio_idx += audio_blocksize
+
+        # print("new audio idx", audio_idx)
+        # print("audio shape", audio.shape)
+        # print("new midi idx", midi_idx)
+        # print("midi shape", midi.shape)
+
+
+    # add the last bit
+    last_audio_block = audio[audio_idx:]
+    last_midi_block = None
+    if midi_idx < midi.shape[1]:
+        last_midi_block = midi_T[midi_idx:]
+
+    #print("last audio", last_audio_block.shape)
+    #print("last midi", last_midi_block.shape)
+
+    if last_audio_block.shape[0] > 0:
+        blocks, block_idx = update_blocks(blocks, last_audio_block, last_midi_block, delta, block_idx, audio_header, midi_header)
 
     return blocks.T
 
@@ -340,12 +381,7 @@ def main(args):
         files = glob(os.path.join(args.datadir, '**/*.ecdc'), recursive=True)
 
     n = len(files) // args.workers
-    if args.debug:
-        shards = [files[0:n]]
-    else:
-        shards = [files[i:i+n] for i in range(args.workers)] # dropping a few tracks (< args.workers)
-    print("files:", len(files))
-    print("shards", len(shards))
+    shards = [files[i:i+n] for i in range(args.workers)] # dropping a few tracks (< args.workers)
     outfiles = os.path.join(args.outdir, os.path.basename(args.datadir) + '.{t}.shard-{s:03}.txt')
     print('Outputs to:', outfiles)
     outputs = [outfiles.format(t=args.type, s=s) for s in range(len(shards))]
