@@ -84,7 +84,9 @@ if __name__ == '__main__':
     else:
         raise ValueError(f'Invalid vocabulary type "{args.vocab}"')
 
-    save_path = '/nlp/scr/kathli/output/mm/bf5v4qyg' #mm_tok_out/sonify/trans_midigen'
+    #save_path = '/nlp/scr/kathli/mm_tok_out/sonify/'
+    save_path = args.filename[:args.filename.rfind('/')]
+    print(save_path)
  
     separator = vocab['separator']
     scale_offset = vocab['scale_offset']
@@ -103,14 +105,26 @@ if __name__ == '__main__':
             tokens = [int(token) for token in line.split()]
             blocks = tokens
 
+            print('Tokens:', len(tokens))
+
             # strip the control block
             tokens = tokens[4:]
+
+            # find all instances of separator and print their indexes
+            sep_idxs = [idx for idx, token in enumerate(tokens) if token == separator]
+            print('Separator indexes:', sep_idxs)
 
             # strip sequence separators
             tokens = [token for token in tokens if token != separator]
 
+            print('Tokens:', len(tokens))
+
             # strip control tokens
             tokens = [token for token in tokens if token > 10]
+
+            print('Tokens:', len(tokens))
+
+            #tokens = tokens[:6628]
 
             if skew:
                 blocks = audio.deskew(tokens, 4)
@@ -119,15 +133,27 @@ if __name__ == '__main__':
 
             if args.vocab == 'mm':
                 blocks, midi_blocks = split(blocks, vocab, args.debug)
+                print(blocks.shape, midi_blocks.shape)
+                print(midi_blocks)
                 if midi_blocks.shape[1] > 0:
                     #mid = compound_to_midi(blocks, vocab) # this is compound only
                     mid = compound_to_midi(mm_to_compound(midi_blocks, vocab), vocab)
 
-                mid.save(f'{save_path}/{Path(args.filename).stem}-{i}.mid')
+                    mid.save(f'{save_path}/{Path(args.filename).stem}-{i}.mid')
+                    print('Saved midi to', f'{save_path}/{Path(args.filename).stem}-{i}.mid')
 
-            continue
             if blocks.shape[1] == 0:
                 continue
+
+            first_seek = -1
+            for seek in range(blocks.shape[1]):
+                if blocks[0,seek] >= scale_offset and blocks[0,seek] < scale_offset + scale_res:
+                    if first_seek == -1:
+                        first_seek = seek
+                    print(seek, blocks[0,seek])
+
+            # delete the awkward bit between 906 and 1361
+            #blocks = torch.cat((blocks[:,:906], blocks[:,1361:]), dim=1)
 
             # seek for the first complete frame
             for seek, block in enumerate(blocks.T):
@@ -147,3 +173,4 @@ if __name__ == '__main__':
                 with torch.no_grad():
                     wav = model.decode(zip(frames, [torch.tensor(s/100.).view(1) for s in scales]))[0]
                 torchaudio.save(f'{save_path}/{Path(args.filename).stem}-{i}.wav', wav, model.sample_rate)
+                print('Saved wav to', f'{save_path}/{Path(args.filename).stem}-{i}.wav')

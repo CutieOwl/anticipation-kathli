@@ -14,16 +14,16 @@ from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 
 from anticipation.audiovocab import SEPARATOR
 
-MODEL = "54labs45" #"9qbavecu"
-STEP_NUM = 70990 #42430
+MODEL = "vl5058w4" #"9qbavecu"
+STEP_NUM = 50000 #50000 #99588 #42430
 
 #DATA = "/juice4/scr4/nlp/music/audio/dataset/test.txt" # this is the old audio tokenization dataset
 
 # don't have a local test set so eval on validation
 #DATA = "/juice4/scr4/nlp/music/datasets/encodec_fma.audiogen.valid.txt"
 
-DATA = "/juice4/scr4/nlp/music/temp_test/lakh.midigen.test.txt" # this is the clean midi dataset
-DATA_2 = "/juice4/scr4/nlp/music/temp_test/encodec_fma.trans_midigen.test.txt" # this is the transcribed midi dataset
+DATA = "/juice4/scr4/nlp/music/train/commercial-audiogen-sharded/train.shard-0.txt" # this is the clean midi dataset
+DATA_2 = "/juice4/scr4/nlp/music/train/fma-audiogen-sharded/train.shard-0.txt" # this is the transcribed midi dataset
 
 SUBSAMPLE = 100
 SUBSAMPLE_IDX = 0

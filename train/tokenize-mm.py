@@ -101,12 +101,17 @@ def anticipate(audio, midi, delta):
     return blocks.T
 
 
-def get_midi_block(midi_T, midi_idx, midi_quantization, time_offset, curr_time_ub, midi_time):
+def get_midi_block(midi_T, midi_idx, midi_quantization, time_offset, start_time, curr_time_ub, midi_time):
     if midi_idx >= midi_T.shape[0]:
         return None, midi_idx, 0
 
     midi_end_idx = midi_idx
+    first = False
+    first_time = 0
     while midi_time + midi_T[midi_end_idx, 0] - time_offset < curr_time_ub * midi_quantization:
+        if first:
+            first = False
+            first_time = midi_time + midi_T[midi_end_idx, 0] - time_offset - start_time * midi_quantization
         midi_end_idx += 1
         if midi_end_idx >= midi_T.shape[0]:
             break
@@ -181,7 +186,7 @@ def fast_anticipate(audio, midi, delta):
 
         # print("audio", audio_block.shape)
 
-        midi_block, midi_end_idx, midi_time = get_midi_block(midi_T, midi_idx, midi_quantization, time_offset, curr_time_ub, midi_time)
+        midi_block, midi_end_idx, midi_time = get_midi_block(midi_T, midi_idx, midi_quantization, time_offset, curr_time_ub - abs_delta, curr_time_ub, midi_time)
         
         # print("midi", midi_block.shape)
         # print("prev block idx", block_idx)
@@ -206,6 +211,7 @@ def fast_anticipate(audio, midi, delta):
     last_midi_block = None
     if midi_idx < midi.shape[1]:
         last_midi_block = midi_T[midi_idx:]
+        last_midi_block[0,0] = midi_time + midi_T[midi_end_idx, 0] - time_offset - (curr_time_ub - abs_delta) * midi_quantization
 
     #print("last audio", last_audio_block.shape)
     #print("last midi", last_midi_block.shape)

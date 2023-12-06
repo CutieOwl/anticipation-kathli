@@ -12,23 +12,23 @@ from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 
 from anticipation.audiovocab import SEPARATOR
 
-MODEL = "bf5v4qyg"
-STEP_NUM = 99001 #42430 #97645
+MODEL = "teeu4qs9" # "9qbavecu"
+STEP_NUM = 80000 #99722 #99588 #42430
 
-AUDIO_DATA = "/juice4/scr4/nlp/music/audio/dataset/test.txt"
-MIDI_DATA = "/juice4/scr4/nlp/music/datasets/valid/lakh.midigen.valid.txt"
+AUDIO_DATA = "/juice4/scr4/nlp/music/datasets/encodec_fma.audiogen.valid.txt"
+MIDI_DATA = "/juice4/scr4/nlp/music/temp_test/lakh.midigen.test.txt"
 SUBSAMPLE_IDX = 0
 
-USE_PROMPT = False
+USE_PROMPT = True
 
 ADD_SEPARATOR = True
 
-MODE = "midi"
+MODE = "audio"
 
 TOP_P = 0.98
 
-model_name = f'/nlp/scr/kathli/checkpoints/audio-checkpoints/{MODEL}/step-{STEP_NUM}/hf'
-#model_name = '/juice4/scr4/nlp/music/audio-checkpoints/teeu4qs9/step-80000/hf'
+#model_name = f'/nlp/scr/kathli/checkpoints/audio-checkpoints/{MODEL}/step-{STEP_NUM}/hf'
+model_name = '/juice4/scr4/nlp/music/audio-checkpoints/teeu4qs9/step-80000/hf'
 
 # initialize the model and tokenizer
 model_config_json = json.load(open(f"{model_name}/config.json"))
@@ -43,7 +43,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model.to(device)
 
 # set the seed for reproducibility
-torch.manual_seed(42)
+#torch.manual_seed(42)
 
 def nucleus(logits, top_p):
     # from HF implementation
@@ -70,13 +70,10 @@ def nucleus(logits, top_p):
 if MODE == "midi":
     input_ids = torch.tensor([4, 8, 2, 2]).to(device)
 else:
-    input_ids = torch.tensor([6109, 6113, 6108, 6108]).to(device)
+    input_ids = torch.tensor([3, 7, 2, 2]).to(device)
 
 if ADD_SEPARATOR:
     input_ids = torch.cat([input_ids, torch.tensor([0,0,0,0]).to(device)], dim=-1)
-
-# define the number of tokens to generate
-num_tokens_to_generate = n_positions - input_ids.size(0)
 
 if USE_PROMPT:
     if MODE == "midi":
@@ -84,7 +81,7 @@ if USE_PROMPT:
     else: 
         prompt_file = AUDIO_DATA
     prompt_idx = 0
-    prompt_upto = 100
+    prompt_upto = 1216
     with open(prompt_file, 'r') as f:
         for i, line in enumerate(f):
             if i < prompt_idx:
@@ -98,6 +95,9 @@ if USE_PROMPT:
 
 # initialize the past_key_values tensor to None
 past_key_values = None
+
+# define the number of tokens to generate
+num_tokens_to_generate = n_positions - input_ids.size(0)
 
 # generate the tokens
 with tqdm(range(num_tokens_to_generate)) as progress:
