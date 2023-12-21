@@ -12,8 +12,8 @@ from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 
 from anticipation.audiovocab import SEPARATOR
 
-MODEL = "9qbavecu" #"54labs45" #"ha05xrd3" #"pu4yo6b5" #  #"9qbavecu"
-STEP_NUM =99588#99920# 99588 # #99698 #99920#81001 # # #42430
+MODEL = "pu4yo6b5"# "54labs45" #"ha05xrd3" #"pu4yo6b5" #  #"9qbavecu"
+STEP_NUM = 81001 # 99920 # #81001 # #99588 #42430
 
 AUDIO_DATA = "/juice4/scr4/nlp/music/datasets/encodec_fma.audiogen.valid.txt"
 MIDI_DATA = "/juice4/scr4/nlp/music/temp_test/lakh.midigen.test.txt"
@@ -21,11 +21,11 @@ SUBSAMPLE_IDX = 0
 
 USE_PROMPT = False
 
-ADD_SEPARATOR = True
+ADD_SEPARATOR = False
 
-MODE = "audio"
+MODE = "trans"
 
-TOP_P = 0.96
+TOP_P = 0.99
 
 model_name = f'/nlp/scr/kathli/checkpoints/audio-checkpoints/{MODEL}/step-{STEP_NUM}/hf'
 #model_name = '/juice4/scr4/nlp/music/audio-checkpoints/teeu4qs9/step-80000/hf'
@@ -65,25 +65,73 @@ def nucleus(logits, top_p):
     
     return logits
 
-def safe_logits(logits, idx):
-    #logits[CONTROL_OFFSET:SPECIAL_OFFSET] = -float('inf') # don't generate controls
-    #logits[SPECIAL_OFFSET:] = -float('inf')               # don't generate special tokens
-
-    # don't generate stuff in the wrong time slot
-    if idx % 604 == 0:
-        #print("idx", idx, "scale")
-        logits[:4108] = -float('inf')
-        logits[4208:] = -float('inf')
-    else:
-        logits[4108:4208] = -float('inf')
-
-    return logits
+PROMPT_IDX = 0
+PROMPT_PART = 4
 
 # set the prompt
-if MODE == "midi":
-    input_ids = torch.tensor([4, 8, 2, 2]).to(device)
+if MODE == "synth":
+    prompt_file = "/nlp/scr/kathli/synthesize_valid.txt"
+    PROMPT_IDX
+    with open(prompt_file, 'r') as f:
+        for i, line in enumerate(f):
+            if i < prompt_idx:
+                continue
+
+            if i > prompt_idx:
+                break
+
+            tokens = [int(token) for token in line.split()]
+
+            # find first occurrence of 6 7 10 7 in tokens
+            prompt_upto = 0
+            for j in range(len(tokens)):
+                if tokens[j] == 6 and tokens[j+1] == 7 and tokens[j+2] == 10 and tokens[j+3] == 7:
+                    prompt_upto = j+4
+                    break
+            input_ids = torch.tensor(tokens[:prompt_upto]).to(device)
 else:
-    input_ids = torch.tensor([3, 7, 2, 2]).to(device)
+    prompt_file = "/nlp/scr/kathli/transcribe_valid.txt"
+    with open(prompt_file, 'r') as f:
+        for i, line in enumerate(f):
+            if i < PROMPT_IDX:
+                continue
+
+            if i > PROMPT_IDX:
+                break
+
+            tokens = [int(token) for token in line.split()]
+
+            # find prompt_part-th occurrence of 5 10 7 7 in tokens
+            prompt_start = 0
+            start_occurrence = 0
+            if PROMPT_PART > 0:
+                for j in range(0, len(tokens), 4):
+                    if tokens[j] == 5 and tokens[j+1] == 10 and tokens[j+2] == 7 and tokens[j+3] == 7:
+                        prompt_start = j
+                        if start_occurrence == PROMPT_PART:
+                            break
+                        start_occurrence += 1
+            print("prompt_start", prompt_start)
+
+            prompt_upto = 0
+            end_occurrence = 0
+            got_break = False
+            for j in range(0, len(tokens), 4):
+                prompt_upto = j+4
+                if tokens[j] == 5 and tokens[j+1] == 10 and tokens[j+2] == 7 and tokens[j+3] == 10:
+                    #prompt_upto = j+4
+                    if end_occurrence == PROMPT_PART:
+                        got_break = True
+                        break
+                    end_occurrence += 1
+            print("prompt_upto", prompt_upto)
+            input_ids = torch.tensor(tokens[prompt_start:prompt_upto]).to(device)
+            if PROMPT_PART > 0:
+                input_ids = torch.cat([torch.tensor([5,10,7,2,0,0,0,0]).to(device), input_ids], dim=-1)
+            if not got_break:
+                input_ids = torch.cat([input_ids, torch.tensor([5,10,7,10]).to(device)], dim=-1)
+
+print("INPUT_IDS", input_ids)
 
 if ADD_SEPARATOR:
     input_ids = torch.cat([input_ids, torch.tensor([0,0,0,0]).to(device)], dim=-1)
@@ -115,7 +163,7 @@ num_tokens_to_generate = n_positions - input_ids.size(0)
 print("MODEL", MODEL)
 print("STEP_NUM", STEP_NUM)
 print("MODE", MODE)
-print("TOP_P", TOP_P)
+print("PROMPT_PART", PROMPT_PART)
 
 # generate the tokens
 with tqdm(range(num_tokens_to_generate)) as progress:
@@ -125,8 +173,10 @@ with tqdm(range(num_tokens_to_generate)) as progress:
             logits = model(input_ids, past_key_values=past_key_values).logits[-1,:]
         
         logits = nucleus(logits, TOP_P)
-        if MODE == "audio":
-            logits = safe_logits(logits, i)
+        if MODE == "trans": # only generate midi
+            logits[11:4208] = -float('inf')
+        else: # only generate audio
+            logits[4208:] = -float('inf')
         # sample the next token
         probabilities = torch.softmax(logits, dim=-1).squeeze()
         next_token = torch.multinomial(probabilities, num_samples=1)
@@ -134,9 +184,16 @@ with tqdm(range(num_tokens_to_generate)) as progress:
         next_token = next_token.to(input_ids.device)
         input_ids = torch.cat([input_ids, next_token], dim=-1)
 
+        if next_token < 11:
+            break
         #past_key_values = output.past_key_values
 
         progress.update(1)
+
+# make sure all sequences have length multiple of 4
+if input_ids.size(0) % 4 != 0:
+    extra_zeros = 4 - input_ids.size(0) % 4
+    input_ids = torch.cat([input_ids, torch.tensor([0] * extra_zeros).to(device)], dim=-1)
 
 # print the generated sequence
 generated_sequence = ' '.join([str(tok) for tok in input_ids.cpu().numpy().tolist()])
@@ -150,9 +207,9 @@ if not os.path.exists(OUTPUT_DIR):
 
 i = 0
 
-while os.path.exists(f'{OUTPUT_DIR}/generated-{MODE}-{i}.txt'):
+while os.path.exists(f'{OUTPUT_DIR}/generated-{MODE}-{PROMPT_PART}-{PROMPT_IDX}.txt'):
     i += 1
-with open(f'{OUTPUT_DIR}/generated-{MODE}-{i}.txt', 'w') as f:
+with open(f'{OUTPUT_DIR}/generated-{MODE}-{PROMPT_PART}-{PROMPT_IDX}.txt', 'w') as f:
     f.write(generated_sequence)
 
-print(f'Printed to {OUTPUT_DIR}/generated-{MODE}-{i}.txt')
+print(f'Printed to {OUTPUT_DIR}/generated-{MODE}-{PROMPT_PART}-{PROMPT_IDX}.txt')
