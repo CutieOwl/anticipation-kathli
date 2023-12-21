@@ -167,10 +167,13 @@ if __name__ == '__main__':
                 frames, scales = audio.detokenize(blocks, vocab)
                 print(scales)
                 print(frames[-1].shape)
+                # frames = frames[:-6]
+                # scales = scales[:-6]
                 if frames[-1].shape[2] == 1:
                     frames = frames[:-1]
                     scales = scales[:-1]
                 with torch.no_grad():
                     wav = model.decode(zip(frames, [torch.tensor(s/100.).view(1) for s in scales]))[0]
+                #save_path = "/nlp/scr/kathli/output/mm/pu4yo6b5"
                 torchaudio.save(f'{save_path}/{Path(args.filename).stem}-{i}.wav', wav, model.sample_rate)
                 print('Saved wav to', f'{save_path}/{Path(args.filename).stem}-{i}.wav')
