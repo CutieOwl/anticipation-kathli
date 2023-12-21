@@ -42,8 +42,8 @@ def compound_to_mm(tokens, vocab, stats=False):
     # sanity check and offset
     assert all(-1 <= tok < 2**7 for tok in tokens[2::4])
     assert all(-1 <= tok < 129 for tok in tokens[3::4])
-    mm_tokens[1::4] = [pitch_offset + tok for tok in tokens[2::4]]
-    mm_tokens[2::4] = [instr_offset + tok for tok in tokens[3::4]]
+    mm_tokens[1::4] = [instr_offset + tok for tok in tokens[3::4]]
+    mm_tokens[2::4] = [pitch_offset + tok for tok in tokens[2::4]]
 
     # max duration cutoff and set unknown durations to 250ms
     truncations = sum([1 for tok in tokens[1::4] if tok >= max_duration])
@@ -387,7 +387,7 @@ def main(args):
         files = glob(os.path.join(args.datadir, '**/*.ecdc'), recursive=True)
 
     n = len(files) // args.workers
-    shards = [files[i:i+n] for i in range(args.workers)] # dropping a few tracks (< args.workers)
+    shards = [files[i*n:(i+1)*n] for i in range(args.workers)] # dropping a few tracks (< args.workers)
     outfiles = os.path.join(args.outdir, os.path.basename(args.datadir) + '.{t}.shard-{s:03}.txt')
     print('Outputs to:', outfiles)
     outputs = [outfiles.format(t=args.type, s=s) for s in range(len(shards))]
