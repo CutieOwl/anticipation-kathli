@@ -8,7 +8,22 @@ import torch, torchaudio
 from anticipation import audio
 from anticipation.convert import compound_to_midi
 
-from encodec.model import EncodecModel
+from transformers import EncodecModel as EncodecModel32k
+
+
+SAMPLE_RATE = 32000
+
+
+def detokenize(blocks, vocab):
+    residuals = vocab['config']['residuals']
+    offsets = torch.tensor(vocab['residual_offset'])[:,None]
+    assert residuals > 0
+
+    # remove offsets for the residual vocabularies
+    for i in range(residuals):
+        blocks[i] = blocks[i] - offsets[i]
+
+    return blocks.view(1,1,4,-1)
 
 
 def mm_to_compound(blocks, vocab, debug=False):
@@ -58,7 +73,6 @@ def split(blocks, vocab, debug=False):
                 print('MIDI event at sequence position', i)
                 print('  MIDI sequence interrarival time is', )
 
-
             midi = torch.cat((midi, block.unsqueeze(1)), dim=1)
 
     return audio, midi 
@@ -84,16 +98,17 @@ if __name__ == '__main__':
     else:
         raise ValueError(f'Invalid vocabulary type "{args.vocab}"')
 
+    device = torch.device("cpu")
+
     #save_path = '/nlp/scr/kathli/mm_tok_out/sonify/'
     save_path = args.filename[:args.filename.rfind('/')]
     print(save_path)
- 
+
     separator = vocab['separator']
-    scale_offset = vocab['scale_offset']
-    scale_res = vocab['config']['scale_resolution']
+    pad = vocab['residual_pad']
     skew = vocab['config']['skew']
-    print(separator, scale_offset, scale_res, skew)
-    model = EncodecModel.encodec_model_48khz()
+    print(device, separator, skew)
+    model = EncodecModel32k.from_pretrained("facebook/encodec_32khz").to(device)
     with open(args.filename, 'r') as f:
         for i, line in enumerate(f):
             if i < args.index:
@@ -103,77 +118,39 @@ if __name__ == '__main__':
                 break
 
             tokens = [int(token) for token in line.split()]
-            blocks = tokens
-
-            print('Tokens:', len(tokens))
 
             # strip the control block
             tokens = tokens[4:]
 
-            # find all instances of separator and print their indexes
-            sep_idxs = [idx for idx, token in enumerate(tokens) if token == separator]
-            print('Separator indexes:', sep_idxs)
-
             # strip sequence separators
             tokens = [token for token in tokens if token != separator]
-
-            print('Tokens:', len(tokens))
-
-            # strip control tokens
-            tokens = [token for token in tokens if token > 10]
-
-            print('Tokens:', len(tokens))
-
-            #tokens = tokens[:6628]
 
             if skew:
                 blocks = audio.deskew(tokens, 4)
             else:
                 blocks = torch.tensor(tokens).reshape(-1, 4).T
 
+            # strip residual pads?
+            #tokens = [token for token in tokens if token != pad]
+
             if args.vocab == 'mm':
                 blocks, midi_blocks = split(blocks, vocab, args.debug)
                 print(blocks.shape, midi_blocks.shape)
                 print(midi_blocks)
                 if midi_blocks.shape[1] > 0:
-                    #mid = compound_to_midi(blocks, vocab) # this is compound only
                     mid = compound_to_midi(mm_to_compound(midi_blocks, vocab), vocab)
 
                     mid.save(f'{save_path}/{Path(args.filename).stem}-{i}.mid')
                     print('Saved midi to', f'{save_path}/{Path(args.filename).stem}-{i}.mid')
+                    #mid.save(f'output/{Path(args.filename).stem}-{i}.mid')
 
             if blocks.shape[1] == 0:
                 continue
 
-            first_seek = -1
-            for seek in range(blocks.shape[1]):
-                if blocks[0,seek] >= scale_offset and blocks[0,seek] < scale_offset + scale_res:
-                    if first_seek == -1:
-                        first_seek = seek
-                    print(seek, blocks[0,seek])
-
-            # delete the awkward bit between 906 and 1361
-            #blocks = torch.cat((blocks[:,:906], blocks[:,1361:]), dim=1)
-
-            # seek for the first complete frame
-            for seek, block in enumerate(blocks.T):
-                if scale_offset <= block[0] < scale_offset + scale_res:
-                    break
-
-            print('Seek to:', seek)
-
-            blocks = blocks[:,seek:]
-            if blocks.shape[1] > 0:
-                frames, scales = audio.detokenize(blocks, vocab)
-                print(scales)
-                print(frames[-1].shape)
-                # frames = frames[:-6]
-                # scales = scales[:-6]
-                if frames[-1].shape[2] == 1:
-                    frames = frames[:-1]
-                    scales = scales[:-1]
-                with torch.no_grad():
-                    wav = model.decode(zip(frames, [torch.tensor(s/100.).view(1) for s in scales]))[0]
-                #save_path = "/nlp/scr/kathli/output/mm/pu4yo6b5"
-                torchaudio.save(f'{save_path}/{Path(args.filename).stem}-{i}.wav', wav, model.sample_rate)
-                print('Saved wav to', f'{save_path}/{Path(args.filename).stem}-{i}.wav')
+            audio_codes = detokenize(blocks, vocab).to(device)
+            with torch.no_grad():
+                wav = model.decode(audio_codes, [None]).audio_values.cpu()[0]
+                print(wav.shape)
+            torchaudio.save(f'{save_path}/{Path(args.filename).stem}-{i}.wav', wav, SAMPLE_RATE)
+            print('Saved wav to', f'{save_path}/{Path(args.filename).stem}-{i}.wav')
+            #torchaudio.save(f'output/{Path(args.filename).stem}-{i}.wav', wav, SAMPLE_RATE)

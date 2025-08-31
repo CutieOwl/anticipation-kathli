@@ -47,7 +47,7 @@ def generate(model, input_ids, tokens, safe_logits=safe_nop):
         past_key_values = outputs.past_key_values
 
         # sample the next token
-        logits = outputs.logits[:,-4,:]
+        logits = outputs.logits[:,-1,:]
         logits = safe_logits(logits, idx)
         probabilities = torch.softmax(logits, dim=-1)
         next_token = torch.multinomial(probabilities, num_samples=1)
